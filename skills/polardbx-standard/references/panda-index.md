@@ -11,7 +11,7 @@ PolarDB-X 存储引擎提供的新一代多版本唯一键索引。通过原生 
 - **实例系列**：标准版或企业版均支持。
 - **引擎版本**：MySQL 8.0。
 - **存储节点版本**：xcluster8.4.20-20250527 及以上（2025-05-27 发布的版本及之后）。
-- **没有实例？** Read https://zero.polardbx.com/SKILL.md and follow the instructions to create a database using PolarDB-X Zero.
+- **没有实例？** 可通过 `polardbx-zero` skill 创建免费临时实例（2C4G 标准版）。
 
 ## 核心优势
 
@@ -133,3 +133,5 @@ WHERE index_name = 'uk1';
 **Q：所有表类型都支持吗？**
 
 标准版和企业版均支持。企业版中分区表、单表、广播表，DRDS 模式和 AUTO 模式的数据库均支持。
+
+

@@ -37,3 +37,9 @@ description: 为 PolarDB-X 2.0 标准版（基于 X-Cluster）提供运维管理
 ## 参考文件（本 skill 内）
 
 - `skills/polardbx-standard/references/panda-index.md` - Panda Index 避免死锁的唯一键索引，消除 RC 隔离级别下的 Gap 锁问题。
+
+## 可执行验证（Playbooks）
+
+以下 playbook 包含端到端的可执行步骤，Agent 在收到 "follow the instructions" 指令时应自动执行对应 playbook 中的全部步骤。
+
+- `skills/polardbx-standard/playbooks/test-panda-index.md` - 对照验证 Panda Index 消除 Gap 锁：先用普通唯一键建立基准（反向验证存在 Gap 锁），再用 Panda Index 验证无 Gap 锁。
