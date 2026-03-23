@@ -15,7 +15,7 @@ title: 验证 Panda Index 消除 Gap 锁
 ```bash
 curl -s -X POST https://zero.polardbx.com/api/v1/instances \
   -H 'Content-Type: application/json' \
-  -d '{"tag": "panda-index-test", "ttlMinutes": 1440}'
+  -d '{"tag": "panda-index-test", "ttlMinutes": 60}'
 ```
 
 从响应中提取 `host`、`port`、`username`、`password`。
