@@ -77,3 +77,4 @@ SHOW CREATE DATABASE db_name;
 - `skills/polardbx-sql/references/mysql-compatibility-notes.md` - MySQL 与 PolarDB-X 的兼容性差异和开发限制。
 - `skills/polardbx-sql/references/explain.md` - EXPLAIN 系列命令的用法和执行计划诊断。
 - `skills/polardbx-sql/references/ttl-table.md` - TTL 表定义、冷数据归档和清理调度。
+- `skills/polardbx-sql/references/online-ddl.md` - Online DDL 判断、无锁执行策略、长事务检查、DMS 无锁变更等。
