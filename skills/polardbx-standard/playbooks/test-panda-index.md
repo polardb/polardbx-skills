@@ -117,3 +117,65 @@ curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/<instance_id>
 
 - **通过**：Step 4 出现 `S,GAP`（普通唯一键有 Gap 锁）且 Step 6 无 `GAP` 类型锁（Panda Index 消除了 Gap 锁），两者形成对照。
 - **失败**：Step 4 未出现 `S,GAP`（基准不成立），或 Step 6 出现 `S,GAP`（Panda Index 未生效），或版本不满足前提条件。
+
+## Step 8：生成测试报告
+
+所有步骤执行完毕后，将结果写入一份 Markdown 报告文件。文件保存到用户当前工作目录，命名为 `panda-index-report-<YYYYMMDD-HHmmss>.md`。
+
+报告应包含以下内容，使用实际执行结果填充：
+
+~~~markdown
+# Panda Index 测试报告
+
+- 测试时间：<执行时的时间戳>
+- 实例版本：<SELECT VERSION() 的实际输出>
+- 隔离级别：RC
+
+## 表结构
+
+### t_normal（普通唯一键）
+
+```sql
+<Step 3 中 CREATE TABLE t_normal 的完整语句>
+```
+
+`opt_index_format_panda_enabled = OFF`
+
+### t_panda（Panda Index 唯一键）
+
+```sql
+<Step 5 中 CREATE TABLE t_panda 的完整语句>
+```
+
+`opt_index_format_panda_enabled = ON`
+
+## 测试语句与时序
+
+以下操作在同一个 Session 内按顺序执行：
+
+| 序号 | SQL 语句 | 说明 |
+|------|----------|------|
+| 1 | `BEGIN;` | 开启事务 |
+| 2 | `DELETE FROM <table> WHERE id = 1;` | 删除 id=1 的记录 |
+| 3 | `INSERT INTO <table> VALUES (2, 1);` | 插入新记录，复用已删除的唯一键值 c1=1 |
+| 4 | `SELECT lock_data, lock_mode FROM performance_schema.data_locks WHERE object_name = '<table>' AND index_name = 'uk1';` | 查看 uk1 上的锁信息 |
+| 5 | `ROLLBACK;` | 回滚事务 |
+
+## 测试结果
+
+### 反向验证：t_normal（普通唯一键）
+
+<Step 4 中 SELECT 查询返回的完整结果表格>
+
+结论：<是否出现 S,GAP>
+
+### 正向验证：t_panda（Panda Index）
+
+<Step 6 中 SELECT 查询返回的完整结果表格>
+
+结论：<是否消除 S,GAP>
+
+## 最终结论
+
+<通过 / 失败，以及一句话总结>
+~~~
