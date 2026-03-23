@@ -118,11 +118,9 @@ curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/<instance_id>
 - **通过**：Step 4 出现 `S,GAP`（普通唯一键有 Gap 锁）且 Step 6 无 `GAP` 类型锁（Panda Index 消除了 Gap 锁），两者形成对照。
 - **失败**：Step 4 未出现 `S,GAP`（基准不成立），或 Step 6 出现 `S,GAP`（Panda Index 未生效），或版本不满足前提条件。
 
-## Step 8：生成测试报告
+## Step 8：输出测试报告
 
-所有步骤执行完毕后，将结果写入一份 Markdown 报告文件。文件保存到用户当前工作目录，命名为 `panda-index-report-<YYYYMMDD-HHmmss>.md`。
-
-报告应包含以下内容，使用实际执行结果填充：
+所有步骤执行完毕后，直接向用户输出以下格式的 Markdown 报告（不写入文件），使用实际执行结果填充 `<>` 占位符：
 
 ~~~markdown
 # Panda Index 测试报告
@@ -130,6 +128,14 @@ curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/<instance_id>
 - 测试时间：<执行时的时间戳>
 - 实例版本：<SELECT VERSION() 的实际输出>
 - 隔离级别：RC
+
+## Panda Index 简介
+
+Panda Index 是 PolarDB-X 存储引擎提供的多版本唯一键索引。
+
+MySQL 的普通唯一键在执行"先删后插"等操作时，需要通过 Gap 锁（区间锁）来保证唯一约束不被并发事务破坏。这种 Gap 锁会锁住一个范围而非单行，导致不冲突的并发写入也被阻塞，甚至引发死锁（参见 MySQL Bug #68021）。
+
+Panda Index 在索引记录中内置了 MVCC 版本信息，使引擎可以通过行级版本判断来完成唯一约束检测，无需依赖 Gap 锁锁定区间。这样将全局区间约束检测优化为行级锁粒度，从根本上消除了 RC 隔离级别下唯一键相关的 Gap 锁和由此产生的死锁问题。
 
 ## 表结构
 
@@ -151,7 +157,7 @@ curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/<instance_id>
 
 ## 测试语句与时序
 
-以下操作在同一个 Session 内按顺序执行：
+以下操作在同一个 Session 内按顺序执行（分别对 t_normal 和 t_panda 各执行一轮）：
 
 | 序号 | SQL 语句 | 说明 |
 |------|----------|------|
