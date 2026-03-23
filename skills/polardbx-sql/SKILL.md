@@ -31,7 +31,7 @@ SHOW CREATE DATABASE db_name;
    - 执行 `SELECT VERSION();` 判断实例类型：
      - 结果含 `TDDL` 且版本号 > 5.4.12（如 `5.7.25-TDDL-5.4.19-20251031`）-> **2.0 企业版（分布式版）**，本 skill 适用。从中解析企业版版本号（如 5.4.19）。
      - 结果含 `TDDL` 且版本号 <= 5.4.12（如 `5.6.29-TDDL-5.4.12-16327949`）-> **DRDS 1.0**，本 skill 不适用。
-     - 结果含 `X-Cluster`（如 `8.0.32-X-Cluster-8.4.20-20251017`）-> **2.0 标准版**，100% 兼容 MySQL，本 skill 不适用，直接按 MySQL 语法处理即可。
+     - 结果含 `X-Cluster`（如 `8.0.32-X-Cluster-8.4.20-20251017`）-> **2.0 标准版**，本 skill 不适用，请使用 `polardbx-standard` skill。
    - 确认是 2.0 企业版后，执行 `SHOW CREATE DATABASE db_name;` 确认是 AUTO 模式（MODE = 'auto'）。
    - 版本号影响特性可用性（如 NEW SEQUENCE 需要 5.4.14+，CCI 需要较新版本）。
 2. 确认表类型需求：

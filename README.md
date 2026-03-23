@@ -12,7 +12,10 @@
 
 ```
 skills/
-├── polardbx-sql/          # PolarDB-X SQL 编写与兼容性
+├── polardbx-sql/          # PolarDB-X 企业版 SQL 编写与兼容性
+│   ├── SKILL.md
+│   └── references/
+├── polardbx-standard/     # PolarDB-X 标准版特性与运维
 │   ├── SKILL.md
 │   └── references/
 └── polardbx-zero/         # PolarDB-X Zero 一键创建临时实例
@@ -23,7 +26,8 @@ skills/
 
 ## 当前 Skills
 
-- **polardbx-sql** - PolarDB-X SQL 编写与 MySQL 兼容性处理（分区表、GSI、CCI、Sequence、分布式事务、EXPLAIN、TTL 表等）。
+- **polardbx-sql** - PolarDB-X 企业版 SQL 编写与 MySQL 兼容性处理（分区表、GSI、CCI、Sequence、分布式事务、EXPLAIN、TTL 表等）。
+- **polardbx-standard** - PolarDB-X 标准版独有特性、高可用架构、运维操作和性能最佳实践。
 - **polardbx-zero** - 通过 API 一键创建免认证的 PolarDB-X 临时实例（2C4G 标准版，30 天自动过期），适用于 AI agent 存储、MCP server 后端、临时测试等场景。
 
 ## 安装
