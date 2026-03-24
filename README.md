@@ -12,6 +12,9 @@
 
 ```
 skills/
+├── polardbx/              # PolarDB-X 技术咨询（综合）
+│   ├── SKILL.md
+│   └── references/
 ├── polardbx-sql/          # PolarDB-X 企业版 SQL 编写与兼容性
 │   ├── SKILL.md
 │   └── references/
@@ -26,6 +29,7 @@ skills/
 
 ## 当前 Skills
 
+- **polardbx** - PolarDB-X 智能体，回答分布式数据库架构、部署、运维、故障排查、AI agent skill 等问题。适用于公有云/开源版、标准版/企业版的技术问题，包含完整参考资料索引（阿里云文档、知乎文章、开源指南等），支持 AI 场景。
 - **polardbx-sql** - PolarDB-X 企业版 SQL 编写与 MySQL 兼容性处理（分区表、GSI、CCI、Sequence、分布式事务、EXPLAIN、TTL 表等）。
 - **polardbx-standard** - PolarDB-X 标准版独有特性、高可用架构、运维操作和性能最佳实践。
 - **polardbx-zero** - 通过 API 一键创建免认证的 PolarDB-X 临时实例（2C4G 标准版，30 天自动过期），适用于 AI agent 存储、MCP server 后端、临时测试等场景。
