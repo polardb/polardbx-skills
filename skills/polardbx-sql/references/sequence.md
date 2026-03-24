@@ -105,7 +105,7 @@ CREATE TABLE t_user (
 ) PARTITION BY KEY(user_id) PARTITIONS 16;
 ```
 
-注意：AUTO_INCREMENT 在分布式场景下保证全局唯一，但**不保证连续递增**。
+注意：隐式 Sequence 的类型取决于实例版本。5.4.14+ 版本默认使用 NEW SEQUENCE，AUTO_INCREMENT 在单连接内严格连续递增，跨连接也尽量保持递增趋势。5.4.14 之前的版本默认使用 GROUP SEQUENCE，跨节点分配的值不连续。
 
 ## 修改和删除 Sequence
 
