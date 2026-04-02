@@ -1,9 +1,9 @@
 ---
 name: polardbx-sql
 description: |
-  Design partition schemes, select partition keys, create GSI, and write SQL for PolarDB-X 2.0 Enterprise Edition (Distributed Edition) AUTO mode databases, correctly handling differences between PolarDB-X and MySQL (partitioned tables, Global Secondary Indexes GSI, Clustered Columnar Indexes CCI, Sequence, distributed transactions, table groups, TTL tables, efficient pagination queries, etc.).
-  Use when designing partition schemes for PolarDB-X tables, selecting partition keys based on query patterns, converting single tables to PolarDB-X partitioned tables, creating GSI/UGSI/CCI indexes, generating SQL to run on PolarDB-X, migrating MySQL SQL to PolarDB-X, diagnosing slow SQL on PolarDB-X, or debugging PolarDB-X SQL compatibility issues.
-  Triggers: "PolarDB-X SQL", "PolarDB-X create table", "partitioned table", "partition design", "partition scheme", "partition key", "partition key selection", "choose partition key", "GSI", "CCI", "Sequence", "MySQL migrate to PolarDB-X", "PolarDB-X compatibility", "single table to partitioned table", "convert to partitioned table", "table partitioning", "large table", "table sharding", "sharding strategy", "data distribution", "distributed table", "AUTO mode", "slow query optimization", "split table", "horizontal partitioning", "pagination query", "paging", "LIMIT OFFSET", "Keyset pagination", "cursor pagination", "Range partition", "auto add partition", "auto pre-create partition", "PolarDB-X slow query", "full-shard scan"
+  Design partition schemes, select partition keys, create GSI, and write SQL for PolarDB-X 2.0 Enterprise Edition AUTO mode databases, handling PolarDB-X vs MySQL differences (partitioned tables, GSI, CCI, Sequence, table groups, TTL, pagination, etc.).
+  Use when designing partition schemes, selecting partition keys, converting single tables to partitioned tables, creating GSI/CCI indexes, writing or migrating SQL for PolarDB-X, or diagnosing slow queries on PolarDB-X.
+  Triggers: "PolarDB-X SQL", "PolarDB-X create table", "partitioned table", "partition design", "partition scheme", "partition key", "GSI", "CCI", "Sequence", "MySQL migrate to PolarDB-X", "PolarDB-X compatibility", "single table to partitioned table", "convert to partitioned table", "large table", "table sharding", "distributed table", "AUTO mode", "pagination query", "Keyset pagination", "Range partition", "auto add partition", "PolarDB-X slow query", "full-shard scan"
 metadata:
   version: 0.2.0
 ---
