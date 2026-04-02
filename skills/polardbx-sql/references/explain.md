@@ -1,70 +1,70 @@
 ---
-title: PolarDB-X EXPLAIN 执行计划诊断
+title: PolarDB-X EXPLAIN Execution Plan Diagnostics
 ---
 
-# PolarDB-X EXPLAIN 执行计划诊断
+# PolarDB-X EXPLAIN Execution Plan Diagnostics
 
-PolarDB-X 提供丰富的 EXPLAIN 命令变体，用于查看和分析 SQL 的执行计划。与 MySQL 不同，PolarDB-X 的执行计划分为**CN（计算节点）逻辑计划**和**DN（存储节点）物理计划**两层。
+PolarDB-X provides a rich set of EXPLAIN command variants for viewing and analyzing SQL execution plans. Unlike MySQL, PolarDB-X execution plans are divided into two layers: **CN (Compute Node) logical plans** and **DN (Data Node) physical plans**.
 
-## 完整语法
+## Full Syntax
 
 ```sql
-EXPLAIN {选项} <SQL语句>
+EXPLAIN {option} <SQL statement>
 ```
 
-支持的选项：`LOGICALVIEW` | `LOGIC` | `SIMPLE` | `DETAIL` | `EXECUTE` | `PHYSICAL` | `OPTIMIZER` | `SHARDING` | `COST` | `ANALYZE` | `BASELINE` | `JSON_PLAN`
+Supported options: `LOGICALVIEW` | `LOGIC` | `SIMPLE` | `DETAIL` | `EXECUTE` | `PHYSICAL` | `OPTIMIZER` | `SHARDING` | `COST` | `ANALYZE` | `BASELINE` | `JSON_PLAN`
 
-## 常用选项
+## Common Options
 
-### EXPLAIN（默认）
+### EXPLAIN (Default)
 
-查看 CN 层的逻辑执行计划：
+View the CN layer logical execution plan:
 
 ```sql
 EXPLAIN SELECT * FROM t_order WHERE buyer_id = 12345;
 ```
 
-输出中的关键参数：
-- `HitCache`：是否命中 PlanCache（true/false）。
-- `TemplateId`：查询计划的全局唯一标识符。
-- `Source`：计划来源（如 PLAN_CACHE）。
-- `WorkloadType`：工作负载类型（如 TP、AP）。
+Key parameters in the output:
+- `HitCache`: Whether PlanCache was hit (true/false).
+- `TemplateId`: Globally unique identifier for the query plan.
+- `Source`: Plan source (e.g., PLAN_CACHE).
+- `WorkloadType`: Workload type (e.g., TP, AP).
 
 ### EXPLAIN EXECUTE
 
-查看下推到 DN 的物理执行计划（类似 MySQL 的 EXPLAIN），快速诊断索引使用情况：
+View the physical execution plan pushed down to DN (similar to MySQL's EXPLAIN), for quickly diagnosing index usage:
 
 ```sql
 EXPLAIN EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
 ```
 
-默认聚合所有 DN 的执行计划信息，通过 Extra 列标注差异：
-- `Same plan` / `Different plan` 表示各 DN 执行计划是否一致。
-- `Scan rows` 显示扫描行数统计。
+Aggregates execution plan information from all DNs by default, with differences noted in the Extra column:
+- `Same plan` / `Different plan` indicates whether execution plans are consistent across DNs.
+- `Scan rows` shows scan row count statistics.
 
 ### EXPLAIN ANALYZE
 
-实际执行 SQL 并收集运行统计信息（注意：会真正执行查询）：
+Actually executes the SQL and collects runtime statistics (note: this will actually execute the query):
 
 ```sql
 EXPLAIN ANALYZE SELECT * FROM t_order WHERE buyer_id = 12345;
 ```
 
-额外输出 `rowCount`、执行时间等运行时信息，用于对比估算行数和实际行数。
+Outputs additional `rowCount`, execution time, and other runtime information for comparing estimated vs. actual row counts.
 
 ### EXPLAIN SHARDING
 
-查看查询在 DN 上的分片扫描情况，判断是否存在全分片扫描：
+View the shard scan pattern of a query on DNs to determine if a full-shard scan is occurring:
 
 ```sql
 EXPLAIN SHARDING SELECT * FROM t_order WHERE buyer_id = 12345;
 ```
 
-如果发现扫描了所有分片，说明查询条件未命中分区键，考虑添加 GSI。
+If all shards are being scanned, the query condition does not hit the partition key — consider adding a GSI.
 
 ### EXPLAIN COST
 
-查看各算子的代价估算和 WORKLOAD 类型识别：
+View cost estimation for each operator and WORKLOAD type identification:
 
 ```sql
 EXPLAIN COST SELECT * FROM t_order WHERE buyer_id = 12345;
@@ -72,19 +72,19 @@ EXPLAIN COST SELECT * FROM t_order WHERE buyer_id = 12345;
 
 ### EXPLAIN PHYSICAL
 
-查看执行模式、Fragment 依赖关系和并行度：
+View execution mode, Fragment dependencies, and parallelism:
 
 ```sql
 EXPLAIN PHYSICAL SELECT * FROM t_order WHERE buyer_id = 12345;
 ```
 
-## DN 级 EXPLAIN 变体
+## DN-Level EXPLAIN Variants
 
-需要较新版本（polardb-2.5.0_5.4.20+）。
+Requires a newer version (polardb-2.5.0_5.4.20+).
 
 ### EXPLAIN DIFF_EXECUTE
 
-仅显示存在差异的 DN 执行计划，快速定位问题 DN：
+Shows only DN execution plans with differences, for quickly locating problematic DNs:
 
 ```sql
 EXPLAIN DIFF_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
@@ -92,7 +92,7 @@ EXPLAIN DIFF_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
 
 ### EXPLAIN ALL_EXECUTE
 
-显示所有 DN 的详细执行计划：
+Shows detailed execution plans for all DNs:
 
 ```sql
 EXPLAIN ALL_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
@@ -100,7 +100,7 @@ EXPLAIN ALL_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
 
 ### EXPLAIN TREE_EXECUTE
 
-以树状结构展示 DN 执行计划：
+Displays DN execution plans in a tree structure:
 
 ```sql
 EXPLAIN TREE_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
@@ -108,7 +108,7 @@ EXPLAIN TREE_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
 
 ### EXPLAIN JSON_EXECUTE
 
-以 JSON 格式输出 DN 优化器信息：
+Outputs DN optimizer information in JSON format:
 
 ```sql
 EXPLAIN JSON_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
@@ -116,23 +116,23 @@ EXPLAIN JSON_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
 
 ### EXPLAIN ANALYZE_EXECUTE
 
-实际执行 SQL 并展示 DN 级别的执行统计信息：
+Actually executes the SQL and shows DN-level execution statistics:
 
 ```sql
 EXPLAIN ANALYZE_EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
 ```
 
-## HINT 辅助
+## HINT Assistance
 
 ```sql
--- 查看所有物理分表级别的 DN 执行计划
+-- View DN execution plans at the physical sub-table level
 /*+TDDL:EXPLAIN_EXECUTE_PHYTB_LEVEL=2*/
 EXPLAIN EXECUTE SELECT * FROM t_order WHERE buyer_id = 12345;
 ```
 
-## 诊断建议
+## Diagnostic Recommendations
 
-- 如果 `EXPLAIN` 显示全分片扫描，检查查询条件是否包含分区键或 GSI 键。
-- 如果 `EXPLAIN EXECUTE` 显示 `Different plan`，可能是数据倾斜导致部分 DN 选择了不同执行计划。
-- 如果估算行数与实际行数差距大，考虑执行 `ANALYZE TABLE` 刷新统计信息。
-- 如果 `EXPLAIN SHARDING` 显示扫描过多分片，考虑优化分区策略或添加 GSI。
+- If `EXPLAIN` shows a full-shard scan, check whether the query condition includes the partition key or GSI key.
+- If `EXPLAIN EXECUTE` shows `Different plan`, data skew may be causing some DNs to choose different execution plans.
+- If estimated row counts differ significantly from actual row counts, consider running `ANALYZE TABLE` to refresh statistics.
+- If `EXPLAIN SHARDING` shows too many shards being scanned, consider optimizing the partition strategy or adding a GSI.

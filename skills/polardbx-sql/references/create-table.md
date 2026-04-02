@@ -1,16 +1,16 @@
 ---
-title: PolarDB-X 建表（表类型、分区策略与管理）
+title: PolarDB-X CREATE TABLE (Table Types, Partition Strategies, and Management)
 ---
 
-# PolarDB-X 建表
+# PolarDB-X CREATE TABLE
 
-PolarDB-X 分布式版支持三种表类型：单表、广播表和分区表。分区表是默认类型，数据按分区规则水平拆分到多个存储节点（DN）。
+PolarDB-X Distributed Edition supports three table types: single tables, broadcast tables, and partitioned tables. Partitioned tables are the default type, where data is horizontally split across multiple storage nodes (DN) according to partition rules.
 
-## 三种表类型
+## Three Table Types
 
-### 单表（SINGLE）
+### Single Table (SINGLE)
 
-数据只存储在一个 DN 上，适用于无需分布式的小表。
+Data is stored on a single DN, suitable for small tables that don't require distribution.
 
 ```sql
 CREATE TABLE config_tbl (
@@ -20,9 +20,9 @@ CREATE TABLE config_tbl (
 ) SINGLE;
 ```
 
-### 广播表（BROADCAST）
+### Broadcast Table (BROADCAST)
 
-数据全量复制到每个 DN，适用于数据量小但需要频繁 JOIN 的字典表。
+Data is fully replicated to every DN, suitable for small dictionary tables that need frequent JOINs.
 
 ```sql
 CREATE TABLE region_dict (
@@ -31,15 +31,15 @@ CREATE TABLE region_dict (
 ) BROADCAST;
 ```
 
-### 分区表（默认）
+### Partitioned Table (Default)
 
-数据按分区规则分布到多个 DN，适用于大数据量的业务表。
+Data is distributed across multiple DNs according to partition rules, suitable for large business tables.
 
-## 一级分区类型
+## First-Level Partition Types
 
-### KEY 分区
+### KEY Partition
 
-类似 MySQL 的 KEY 分区，基于列值哈希路由，最常用的分区类型：
+Similar to MySQL's KEY partition, routes based on column value hashing. The most commonly used partition type:
 
 ```sql
 CREATE TABLE t_order (
@@ -49,7 +49,7 @@ CREATE TABLE t_order (
 ) PARTITION BY KEY(order_id) PARTITIONS 16;
 ```
 
-向量分区键（多列路由）：
+Vector partition key (multi-column routing):
 
 ```sql
 CREATE TABLE t_item (
@@ -60,29 +60,29 @@ CREATE TABLE t_item (
 ) PARTITION BY KEY(order_id, item_id) PARTITIONS 16;
 ```
 
-### HASH 分区
+### HASH Partition
 
-支持分区函数，可对列值进行计算后再哈希：
+Supports partition functions that can compute on column values before hashing:
 
 ```sql
--- 按年份哈希
+-- Hash by year
 CREATE TABLE t_event (
   id BIGINT PRIMARY KEY,
   event_date DATE
 ) PARTITION BY HASH(YEAR(event_date)) PARTITIONS 8;
 
--- 按天哈希（使用 TO_DAYS）
+-- Hash by day (using TO_DAYS)
 CREATE TABLE t_log (
   id BIGINT PRIMARY KEY,
   created_at DATETIME
 ) PARTITION BY HASH(TO_DAYS(created_at)) PARTITIONS 16;
 ```
 
-注意：向量分区键不支持使用分区函数；时区敏感的时间列建议使用 `UNIX_TIMESTAMP()`。
+Note: Vector partition keys do not support partition functions; for timezone-sensitive time columns, use `UNIX_TIMESTAMP()`.
 
-### CO_HASH 分区
+### CO_HASH Partition
 
-PolarDB-X 特有的联合哈希分区，多列参与路由，任意一列的等值条件都可以实现分区裁剪：
+A PolarDB-X-specific joint hash partition where multiple columns participate in routing. An equality condition on any single column can achieve partition pruning:
 
 ```sql
 CREATE TABLE t_order (
@@ -96,9 +96,9 @@ CREATE TABLE t_order (
 ) PARTITIONS 16;
 ```
 
-### RANGE / RANGE COLUMNS 分区
+### RANGE / RANGE COLUMNS Partition
 
-按范围分区，适用于时间序列或连续数值数据：
+Partitions by range, suitable for time series or continuous numeric data:
 
 ```sql
 CREATE TABLE t_sales (
@@ -113,9 +113,9 @@ CREATE TABLE t_sales (
 );
 ```
 
-### LIST / LIST COLUMNS 分区
+### LIST / LIST COLUMNS Partition
 
-按离散值列表分区，适用于枚举类字段：
+Partitions by discrete value lists, suitable for enumeration-type fields:
 
 ```sql
 CREATE TABLE t_regional_order (
@@ -129,13 +129,13 @@ CREATE TABLE t_regional_order (
 );
 ```
 
-## 二级分区（SUBPARTITION）
+## Secondary Partitions (SUBPARTITION)
 
-PolarDB-X 支持二级分区，一级分区和二级分区可以自由组合（49 种组合）。
+PolarDB-X supports secondary partitions, where first-level and second-level partitions can be freely combined (49 combinations).
 
-### 模板化二级分区
+### Templated Secondary Partitions
 
-所有一级分区使用相同的二级分区定义：
+All first-level partitions use the same secondary partition definition:
 
 ```sql
 CREATE TABLE t_order_detail (
@@ -152,9 +152,9 @@ CREATE TABLE t_order_detail (
 );
 ```
 
-### 非模板化二级分区
+### Non-Templated Secondary Partitions
 
-各一级分区可以有不同数量的二级分区：
+Each first-level partition can have a different number of secondary partitions:
 
 ```sql
 CREATE TABLE t_sales_detail (
@@ -169,40 +169,40 @@ CREATE TABLE t_sales_detail (
 );
 ```
 
-## 分区管理操作
+## Partition Management Operations
 
 ```sql
--- 添加分区（RANGE/LIST 适用）
+-- Add partition (applicable to RANGE/LIST)
 ALTER TABLE t_sales ADD PARTITION (
   PARTITION p2026 VALUES LESS THAN ('2027-01-01')
 );
 
--- 删除分区
+-- Drop partition
 ALTER TABLE t_sales DROP PARTITION p2023;
 
--- 分裂分区（将一个分区拆为多个）
+-- Split partition (split one partition into multiple)
 ALTER TABLE t_order SPLIT PARTITION p0 INTO (
   PARTITION p0a,
   PARTITION p0b
 );
 
--- 合并分区
+-- Merge partitions
 ALTER TABLE t_order MERGE PARTITIONS p0a, p0b TO p0;
 
--- 迁移分区到指定 DN
+-- Move partition to a specific DN
 ALTER TABLE t_order MOVE PARTITIONS p0 TO 'dn-1';
 ```
 
-## 分区键选择原则
+## Partition Key Selection Principles
 
-- 选择**最高频查询条件**中的列作为分区键，避免全分片扫描。
-- 选择**数据分布均匀**的列，避免热点分区。
-- 如果有多个高频查询维度，使用 `CO_HASH` 或创建全局二级索引（GSI）。
-- 每张表**最多 8192 个分区**。
+- Choose columns from the **most frequent query conditions** as partition keys to avoid full-shard scans.
+- Choose columns with **even data distribution** to avoid hotspot partitions.
+- If there are multiple high-frequency query dimensions, use `CO_HASH` or create Global Secondary Indexes (GSI).
+- Each table supports a **maximum of 8192 partitions**.
 
-## 限制
+## Limitations
 
-- 分区键不支持 JSON 类型列。
-- 分区键不支持 GEOMETRY 类型列。
-- 单列 HASH 分区可使用分区函数，向量分区键不可使用。
-- 二级分区表暂不支持 SPLIT/MERGE/ADD/DROP SUBPARTITION。
+- Partition keys do not support JSON type columns.
+- Partition keys do not support GEOMETRY type columns.
+- Single-column HASH partitions can use partition functions; vector partition keys cannot.
+- Secondary partitioned tables do not support SPLIT/MERGE/ADD/DROP SUBPARTITION.

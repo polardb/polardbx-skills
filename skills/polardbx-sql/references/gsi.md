@@ -1,16 +1,16 @@
 ---
-title: PolarDB-X 全局二级索引（GSI）
+title: PolarDB-X Global Secondary Index (GSI)
 ---
 
-# PolarDB-X 全局二级索引（GSI）
+# PolarDB-X Global Secondary Index (GSI)
 
-全局二级索引（Global Secondary Index, GSI）是 PolarDB-X 中的特殊分区表，冗余了主表部分列的数据，按照指定的分区方式分布在各个存储节点上。GSI 的核心作用是解决**非分区键查询导致的全分片扫描**问题。
+A Global Secondary Index (GSI) is a special partitioned table in PolarDB-X that stores redundant copies of selected columns from the primary table, distributed across storage nodes according to a specified partition scheme. The core purpose of GSI is to solve **full-shard scan issues caused by non-partition-key queries**.
 
-## 三种 GSI 类型
+## Three GSI Types
 
-### 全局二级索引（GSI）
+### Global Secondary Index (GSI)
 
-提供与主表不同的分区方式，索引表只包含索引列、主键列和主表分区键：
+Provides a different partition scheme from the primary table. The index table contains only the index columns, primary key columns, and the primary table's partition key:
 
 ```sql
 CREATE TABLE t_order (
@@ -22,9 +22,9 @@ CREATE TABLE t_order (
 ) PARTITION BY KEY(order_id) PARTITIONS 16;
 ```
 
-### 全局唯一索引（UGSI）
+### Global Unique Index (UGSI)
 
-在 GSI 基础上增加全局唯一约束，确保索引键在全表范围内唯一：
+Adds a global uniqueness constraint on top of GSI, ensuring the index key is unique across the entire table:
 
 ```sql
 CREATE TABLE t_user (
@@ -35,9 +35,9 @@ CREATE TABLE t_user (
 ) PARTITION BY KEY(user_id) PARTITIONS 16;
 ```
 
-### 全局聚簇索引（Clustered GSI）
+### Clustered Global Index (Clustered GSI)
 
-默认冗余主表的全部列，避免回表查询，代价是占用与主表相同的存储空间：
+Stores all columns from the primary table by default, avoiding table lookback queries at the cost of storage space equal to the primary table:
 
 ```sql
 CREATE TABLE t_order (
@@ -50,38 +50,38 @@ CREATE TABLE t_order (
 ) PARTITION BY KEY(order_id) PARTITIONS 16;
 ```
 
-## 创建方式
+## Creation Methods
 
-### 建表时内联创建（推荐）
+### Inline creation during table creation (recommended)
 
-见上方各类型示例。
+See the examples above for each type.
 
-### 在已有表上添加
+### Add to an existing table
 
 ```sql
--- 添加普通 GSI
+-- Add a regular GSI
 ALTER TABLE t_order ADD GLOBAL INDEX g_i_seller(seller_id)
   PARTITION BY KEY(seller_id) PARTITIONS 16;
 
--- 添加全局唯一索引
+-- Add a Global Unique Index
 ALTER TABLE t_order ADD UNIQUE GLOBAL INDEX g_i_order_no(order_no)
   PARTITION BY KEY(order_no) PARTITIONS 16;
 
--- 添加全局聚簇索引
+-- Add a Clustered Global Index
 ALTER TABLE t_order ADD CLUSTERED INDEX cg_i_seller(seller_id)
   PARTITION BY KEY(seller_id) PARTITIONS 16;
 ```
 
-### 使用 CREATE INDEX 语法
+### Using CREATE INDEX syntax
 
 ```sql
 CREATE GLOBAL INDEX g_i_seller ON t_order(seller_id)
   PARTITION BY KEY(seller_id) PARTITIONS 16;
 ```
 
-## 覆盖列（COVERING）
+## Covering Columns (COVERING)
 
-通过 `COVERING` 指定额外冗余的列，减少回表开销：
+Use `COVERING` to specify additional redundant columns, reducing table lookback overhead:
 
 ```sql
 CREATE TABLE t_order (
@@ -95,35 +95,35 @@ CREATE TABLE t_order (
 ) PARTITION BY KEY(order_id) PARTITIONS 16;
 ```
 
-索引表自动包含主键列和主表分区键列，无需在 COVERING 中重复指定。
+The index table automatically includes the primary key columns and the primary table's partition key columns; no need to repeat them in COVERING.
 
-## 查询使用
+## Query Usage
 
-PolarDB-X 优化器可以自动选择 GSI，也可以手动指定：
+The PolarDB-X optimizer can automatically select GSIs, or you can specify them manually:
 
 ```sql
--- 使用 FORCE INDEX
+-- Using FORCE INDEX
 SELECT * FROM t_order FORCE INDEX(g_i_buyer)
 WHERE buyer_id = 12345;
 
--- 使用 HINT
+-- Using HINT
 SELECT /*+TDDL:INDEX(t_order, g_i_buyer)*/ *
 FROM t_order WHERE buyer_id = 12345;
 ```
 
-## 限制条件
+## Limitations
 
-- 每张表最多 **32 个全局索引**。
-- GSI 需要 **XA/TSO 分布式事务**支持。
-- 禁止直接对 GSI 索引表执行 DML（INSERT/UPDATE/DELETE）或 DDL。
-- 禁止 `TRUNCATE` 含 GSI 的表，用 `DELETE` 清空数据替代。
-- 删除包含在 GSI 中的列之前，需先删除对应的 GSI。
-- GSI 的写入性能有额外开销（需要同步维护索引表数据一致性）。
-- 创建和删除 GSI 为在线操作，不阻塞 DML。
+- Each table supports a maximum of **32 global indexes**.
+- GSI requires **XA/TSO distributed transaction** support.
+- Direct DML (INSERT/UPDATE/DELETE) or DDL on GSI index tables is prohibited.
+- `TRUNCATE` on tables with GSI is prohibited; use `DELETE` to clear data instead.
+- Before dropping a column included in a GSI, the corresponding GSI must be dropped first.
+- GSI write performance has additional overhead (index table data must be kept consistent).
+- Creating and dropping GSIs are online operations that do not block DML.
 
-## 设计建议
+## Design Recommendations
 
-- 优先将**最高频的非分区键查询条件**设计为 GSI。
-- 如果查询需要返回较多列，使用 **Clustered GSI** 避免回表。
-- 如果只需要少量额外列，使用 **COVERING** 比 Clustered GSI 更节省空间。
-- 如果需要全局唯一约束（如手机号、订单号），使用 **UGSI**。
+- Prioritize creating GSIs for the **most frequent non-partition-key query conditions**.
+- If queries need to return many columns, use **Clustered GSI** to avoid table lookback.
+- If only a few additional columns are needed, **COVERING** is more storage-efficient than Clustered GSI.
+- If global uniqueness constraints are needed (e.g., phone numbers, order numbers), use **UGSI**.

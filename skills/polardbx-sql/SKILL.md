@@ -1,82 +1,123 @@
 ---
 name: polardbx-sql
-description: 为 PolarDB-X 2.0 分布式版（企业版）AUTO 模式数据库编写、审查和适配 SQL，正确处理 PolarDB-X 与 MySQL 的差异（分区表、全局二级索引 GSI、列存索引 CCI、Sequence、分布式事务、表组、TTL 表等）。适用于生成需要在 PolarDB-X 上运行的 SQL、将 MySQL SQL 迁移到 PolarDB-X、或调试 PolarDB-X SQL 兼容性问题的场景。
+description: |
+  Design partition schemes, select partition keys, create GSI, and write SQL for PolarDB-X 2.0 Enterprise Edition (Distributed Edition) AUTO mode databases, correctly handling differences between PolarDB-X and MySQL (partitioned tables, Global Secondary Indexes GSI, Clustered Columnar Indexes CCI, Sequence, distributed transactions, table groups, TTL tables, efficient pagination queries, etc.).
+  Use when designing partition schemes for PolarDB-X tables, selecting partition keys based on query patterns, converting single tables to PolarDB-X partitioned tables, creating GSI/UGSI/CCI indexes, generating SQL to run on PolarDB-X, migrating MySQL SQL to PolarDB-X, diagnosing slow SQL on PolarDB-X, or debugging PolarDB-X SQL compatibility issues.
+  Triggers: "PolarDB-X SQL", "PolarDB-X create table", "partitioned table", "partition design", "partition scheme", "partition key", "partition key selection", "choose partition key", "GSI", "CCI", "Sequence", "MySQL migrate to PolarDB-X", "PolarDB-X compatibility", "single table to partitioned table", "convert to partitioned table", "table partitioning", "large table", "table sharding", "sharding strategy", "data distribution", "distributed table", "AUTO mode", "slow query optimization", "split table", "horizontal partitioning", "pagination query", "paging", "LIMIT OFFSET", "Keyset pagination", "cursor pagination", "Range partition", "auto add partition", "auto pre-create partition", "PolarDB-X slow query", "full-shard scan"
 metadata:
-  version: 0.1.0
+  version: 0.2.0
 ---
 
-# PolarDB-X SQL（MySQL 兼容性聚焦）
+# PolarDB-X SQL (MySQL Compatibility Focus)
 
-目标：生成能在 PolarDB-X 2.0 分布式版（企业版）AUTO 模式数据库上正确运行的 SQL，避免"MySQL 上能跑但 PolarDB-X 上报错"的问题。
+Write, review, and adapt SQL for PolarDB-X 2.0 Enterprise Edition (Distributed Edition) AUTO mode databases, avoiding the "runs on MySQL but fails on PolarDB-X" problem.
 
-## 适用范围
+**Architecture**: PolarDB-X 2.0 Enterprise Edition (CN compute nodes + DN storage nodes + GMS metadata service + CDC log nodes) + AUTO mode database
 
-本 skill 仅适用于以下版本和模式：
+**Scope**:
 
-- **PolarDB-X 2.0 企业版**（又称分布式版） + **AUTO 模式数据库**
+- **PolarDB-X 2.0 Enterprise Edition** (also known as Distributed Edition) + **AUTO mode database**
 
-不适用于：
-- PolarDB-X 1.0（DRDS 1.0）
-- PolarDB-X 2.0 标准版
-- PolarDB-X 2.0 企业版的 DRDS 模式数据库
+Not applicable to:
+- PolarDB-X 1.0 (DRDS 1.0)
+- PolarDB-X 2.0 Standard Edition
+- PolarDB-X 2.0 Enterprise Edition DRDS mode databases
 
-AUTO 模式和 DRDS 模式的主要区别：AUTO 模式使用 MySQL 兼容的 `PARTITION BY` 语法定义分区，DRDS 模式使用旧版 `dbpartition/tbpartition` 语法。可通过以下方式确认数据库模式：
+Key difference between AUTO mode and DRDS mode: AUTO mode uses MySQL-compatible `PARTITION BY` syntax to define partitions, while DRDS mode uses the legacy `dbpartition/tbpartition` syntax. Verify the database mode with:
 
 ```sql
 SHOW CREATE DATABASE db_name;
--- 输出中 MODE = 'auto' 表示 AUTO 模式
+-- Output containing MODE = 'auto' indicates AUTO mode
 ```
 
-## Workflow（每次使用时遵循）
+## Core Workflow (Follow each time)
 
-1. 确认目标引擎和版本：
-   - 执行 `SELECT VERSION();` 判断实例类型：
-     - 结果含 `TDDL` 且版本号 > 5.4.12（如 `5.7.25-TDDL-5.4.19-20251031`）-> **2.0 企业版（分布式版）**，本 skill 适用。从中解析企业版版本号（如 5.4.19）。
-     - 结果含 `TDDL` 且版本号 <= 5.4.12（如 `5.6.29-TDDL-5.4.12-16327949`）-> **DRDS 1.0**，本 skill 不适用。
-     - 结果含 `X-Cluster`（如 `8.0.32-X-Cluster-8.4.20-20251017`）-> **2.0 标准版**，本 skill 不适用，请使用 `polardbx-standard` skill。
-   - 确认是 2.0 企业版后，执行 `SHOW CREATE DATABASE db_name;` 确认是 AUTO 模式（MODE = 'auto'）。
-   - 版本号影响特性可用性（如 NEW SEQUENCE 需要 5.4.14+，CCI 需要较新版本）。
-2. 确认表类型需求：
-   - 小表或字典表 -> 广播表 `BROADCAST`（全量复制到每个 DN）。
-   - 无需分布式的表 -> 单表 `SINGLE`（仅存储在一个 DN）。
-   - 其他情况 -> 分区表（默认），选择合适的分区键和分区策略。
-3. 生成 SQL 时使用 PolarDB-X 安全默认值：
-   - 避免不支持的 MySQL 特性（存储过程/触发器/EVENT/SPATIAL 等）。
-   - 使用 `KEY` 或 `HASH` 分区替代 MySQL 的 AUTO_INCREMENT 主键写热点。
-   - 需要非分区键查询时，考虑创建全局二级索引（GSI）。
-   - 需要全局唯一 ID 时，使用 Sequence 而非依赖 AUTO_INCREMENT 的连续性。
-4. 如果用户提供 MySQL SQL，进行兼容性检查：
-   - 替换不支持的特性，给出 PolarDB-X 替代方案。
-   - 明确标注行为差异和版本要求。
-5. SQL 慢或报错时，使用 PolarDB-X 诊断工具：
-   - `EXPLAIN` 查看逻辑执行计划。
-   - `EXPLAIN EXECUTE` 查看下推到 DN 的物理执行计划。
-   - `EXPLAIN SHARDING` 查看分片扫描情况，判断是否存在全分片扫描。
-   - `EXPLAIN ANALYZE` 实际执行并收集运行统计。
+1. Confirm the target engine and version:
+   - Run `SELECT VERSION();` to determine the instance type:
+     - Result contains `TDDL` with version > 5.4.12 (e.g., `5.7.25-TDDL-5.4.19-20251031`) -> **2.0 Enterprise Edition (Distributed Edition)**, this skill applies. Parse the Enterprise Edition version number (e.g., 5.4.19).
+     - Result contains `TDDL` with version <= 5.4.12 (e.g., `5.6.29-TDDL-5.4.12-16327949`) -> **DRDS 1.0**, this skill does not apply.
+     - Result contains `X-Cluster` (e.g., `8.0.32-X-Cluster-8.4.20-20251017`) -> **2.0 Standard Edition**, this skill does not apply, use the `polardbx-standard` skill instead.
+   - After confirming 2.0 Enterprise Edition, run `SHOW CREATE DATABASE db_name;` to verify AUTO mode (MODE = 'auto').
+   - The version number affects feature availability (e.g., NEW SEQUENCE requires 5.4.14+, CCI requires a newer version).
+2. Determine the table type:
+   - Small or dictionary tables -> Broadcast table `BROADCAST` (fully replicated to every DN).
+   - Tables that don't need distribution -> Single table `SINGLE` (stored on one DN only).
+   - Otherwise -> Partitioned table (default), choose appropriate partition key and strategy.
+3. Partition scheme design (for partitioned tables):
+   - Collect SQL access pattern data: prefer SQL Insight (most accurate); when unavailable, use slow query logs + application code analysis, or have the business team provide SQL patterns as alternatives. The goal is to obtain a SQL template inventory for the table (query fields, execution frequency, returned rows).
+   - **Partition key selection**: Prefer fields with high equality query ratio and high cardinality; primary keys/unique keys have a natural advantage (highest cardinality, no hotspots); exclude fields with hotspots (fields with few distinct values or extremely uneven distribution are unsuitable as partition keys).
+   - **GSI selection**: Decide strategy based on write volume — tables with low write volume can freely create GSIs; create GSIs for high-frequency non-partition-key query fields; fields with low cardinality and time fields are unsuitable for GSI; fields that always appear combined with other fields and never appear alone don't need standalone GSIs. GSI types: regular GSI for few returned rows, Clustered GSI for one-to-many, UGSI for unique constraints. **GSI syntax must include `PARTITION BY KEY(...) PARTITIONS N`** — see [gsi.md](references/gsi.md) for full syntax.
+   - **Partition algorithm**: ~90% of workloads use single-level HASH/KEY; order-type multi-dimensional queries use CO_HASH; time-based data cleanup uses HASH+RANGE; multi-tenant uses LIST+HASH. For single column, HASH and KEY are equivalent.
+   - **Partition count**: 256 suits the vast majority of workloads; should be several times the number of DN nodes; keep single partition under 100 million rows.
+   - **Migration workflow** (three-step method for single table to partitioned table): (1) First convert to a partitioned table with 1 partition (preserving uniqueness) -> (2) Create required GSI/UGSI -> (3) Change to the target partition count. See [partition-design-best-practice.md](references/partition-design-best-practice.md) for details.
+4. Use PolarDB-X safe defaults when generating SQL:
+   - Avoid unsupported MySQL features (stored procedures/triggers/EVENTs/SPATIAL, etc.).
+   - Use `KEY` or `HASH` partitioning instead of MySQL's AUTO_INCREMENT primary key write hotspot.
+   - When non-partition-key queries are needed, consider creating Global Secondary Indexes (GSI).
+5. If the user provides MySQL SQL, perform compatibility checks:
+   - Replace unsupported features and provide PolarDB-X alternatives.
+   - Clearly mark behavioral differences and version requirements.
+6. When SQL is slow or errors occur, use PolarDB-X diagnostic tools:
+   - `EXPLAIN` to view the logical execution plan.
+   - `EXPLAIN EXECUTE` to view the physical execution plan pushed down to DN.
+   - `EXPLAIN SHARDING` to view shard scan details and check for full-shard scans.
+   - `EXPLAIN ANALYZE` to actually execute and collect runtime statistics.
 
-## 核心差异速查
+## Key Differences Quick Reference
 
-- **三种表类型**：单表(`SINGLE`)、广播表(`BROADCAST`)、分区表（默认）；根据数据量和访问模式选择。
-- **分区表**：支持 KEY/HASH/RANGE/LIST/RANGE COLUMNS/LIST COLUMNS/CO_HASH + 二级分区（49 种组合）。
-- **全局二级索引 GSI**：解决非分区键查询导致的全分片扫描问题，支持 GSI / UGSI / Clustered GSI 三种类型。
-- **列存索引 CCI**：行列混合存储，通过 `CLUSTERED COLUMNAR INDEX` 加速 OLAP 分析查询。
-- **Sequence**：全局唯一序列，默认类型为 `NEW SEQUENCE`（5.4.14+），替代 AUTO_INCREMENT 的分布式方案。
-- **分布式事务**：基于 TSO 全局时钟 + MVCC + 2PC，默认强一致；单分片事务自动优化为本地事务。
-- **表组**：相同分区规则的表绑定在同一表组，确保 JOIN 计算下推，避免跨分片数据搬运。
-- **TTL 表**：基于时间列自动过期和清理冷数据，可配合 CCI 实现冷热数据分离。
-- **不支持的 MySQL 特性**：存储过程/触发器/EVENT/SPATIAL/GEOMETRY/LOAD XML/HANDLER 等。
-- **不支持 STRAIGHT_JOIN / NATURAL JOIN**：使用标准 JOIN 语法替代。
-- **不支持 := 赋值运算符**：将逻辑移到应用层。
-- **HAVING/JOIN ON 子句中不支持子查询**：将子查询改写为 JOIN 或 CTE。
+- **Three table types**: Single table (`SINGLE`), Broadcast table (`BROADCAST`), Partitioned table (default); choose based on data volume and access patterns.
+- **Partitioned tables**: Support KEY/HASH/RANGE/LIST/RANGE COLUMNS/LIST COLUMNS/CO_HASH + secondary partitions (49 combinations).
+- **Primary keys and unique keys**: Classified as Global (globally unique) or Local (unique within partition); single/broadcast/auto-partitioned tables are always Global; manual partitioned tables require primary/unique keys to include all partition columns for Global, otherwise Local (risk of data duplication and DDL failure).
+- **Global Secondary Index GSI**: Solves full-shard scan issues for non-partition-key queries, supports GSI / UGSI / Clustered GSI types. **CRITICAL: GSI must specify its own PARTITION BY clause** — it is an independently partitioned table, not a regular MySQL index. Correct syntax:
+  ```sql
+  -- ✅ Correct: GSI with PARTITION BY clause
+  GLOBAL INDEX g_i_seller(seller_id) PARTITION BY KEY(seller_id) PARTITIONS 16
+  CLUSTERED INDEX cg_i_buyer(buyer_id) PARTITION BY KEY(buyer_id) PARTITIONS 16
+  -- ❌ Wrong: Missing PARTITION BY (this is NOT MySQL INDEX syntax)
+  GLOBAL INDEX gsi_seller(seller_id)
+  ```
+- **Clustered Columnar Index CCI**: Row-column hybrid storage, accelerates OLAP analytical queries via `CLUSTERED COLUMNAR INDEX`.
+- **Sequence**: Globally unique sequence, default type is `NEW SEQUENCE` (5.4.14+), distributed alternative to AUTO_INCREMENT.
+- **Distributed transactions**: Based on TSO global clock + MVCC + 2PC, strong consistency by default; single-shard transactions automatically optimized to local transactions.
+- **Table groups**: Tables with the same partition rules bound to the same table group, ensuring JOIN computation pushdown to avoid cross-shard data shuffling.
+- **TTL tables**: Automatic expiration and cleanup of cold data based on time columns, can work with CCI for hot/cold data separation.
+- **Unsupported MySQL features**: Stored procedures/triggers/EVENTs/SPATIAL/GEOMETRY/LOAD XML/HANDLER, etc.
+- **STRAIGHT_JOIN / NATURAL JOIN not supported**: Use standard JOIN syntax instead.
+- **:= assignment operator not supported**: Move logic to the application layer.
+- **Subqueries not supported in HAVING/JOIN ON clauses**: Rewrite subqueries as JOINs or CTEs.
 
-## 参考文件（本 skill 内）
+## Best Practices
 
-- `skills/polardbx-sql/references/create-table.md` - 建表语法、表类型（单表/广播表/分区表）、分区策略、二级分区、分区管理操作。
-- `skills/polardbx-sql/references/gsi.md` - 全局二级索引 GSI/UGSI/Clustered GSI 的创建、查询和限制。
-- `skills/polardbx-sql/references/cci.md` - 列存索引 CCI 的创建、使用和适用场景。
-- `skills/polardbx-sql/references/sequence.md` - Sequence 类型（NEW/GROUP/SIMPLE/TIME）、创建和使用。
-- `skills/polardbx-sql/references/transactions.md` - 分布式事务模型、隔离级别和注意事项。
-- `skills/polardbx-sql/references/mysql-compatibility-notes.md` - MySQL 与 PolarDB-X 的兼容性差异和开发限制。
-- `skills/polardbx-sql/references/explain.md` - EXPLAIN 系列命令的用法和执行计划诊断。
-- `skills/polardbx-sql/references/ttl-table.md` - TTL 表定义、冷数据归档和清理调度。
-- `skills/polardbx-sql/references/online-ddl.md` - Online DDL 判断、无锁执行策略、长事务检查、DMS 无锁变更等。
+1. **Choose the right table type**: Use broadcast tables for small/dictionary tables, single tables for non-distributed needs, partitioned tables for everything else.
+2. **Select partition keys based on real SQL patterns**: Prefer SQL Insight data; when unavailable, use slow query logs or code analysis as alternatives; prioritize fields with high equality query ratio, high cardinality, and no hotspots; primary keys/unique keys are naturally strong partition key candidates.
+3. **Include partition columns in primary keys**: Primary/unique keys of manual partitioned tables should include all partition columns to ensure global uniqueness.
+4. **Create GSIs wisely**: Decide GSI strategy based on write volume; use regular GSI for few returned rows, Clustered GSI for one-to-many, UGSI for unique constraints; don't create GSIs for low-ratio SQL; use `INSPECT INDEX` to periodically clean up redundant GSIs. **Every GSI must have its own `PARTITION BY KEY(...) PARTITIONS N` clause; never write bare `GLOBAL INDEX idx(col)` without PARTITION BY.**
+5. **Use 256 partitions**: 256 partitions suit the vast majority of workloads, should be several times the number of DN nodes.
+6. **Use the three-step method for single table to partitioned table**: First convert to 1 partition (preserving uniqueness) -> Create GSI/UGSI -> Change to target partition count, avoiding uniqueness constraint gaps.
+7. **Don't force partition key hits for low-ratio SQL**: Partition design is pragmatic work; low-QPS cross-shard queries have limited total cost, don't create GSIs for every query field.
+8. **Use table groups to optimize JOINs**: Bind frequently joined tables to the same table group using the same partition rules.
+9. **Avoid unsupported MySQL syntax**: Don't use stored procedures, triggers, EVENTs, SPATIAL, NATURAL JOIN, `:=`, etc.
+10. **Avoid subqueries in HAVING/JOIN ON**: Rewrite as JOINs or CTEs.
+11. **Use EXPLAIN commands for diagnosis**: For SQL performance issues, prefer `EXPLAIN SHARDING` and `EXPLAIN ANALYZE`.
+12. **Check long transactions before Online DDL**: Check for long transactions before executing DDL to avoid MDL lock waits.
+13. **Use TTL tables to manage cold data**: For large tables with time attributes, use TTL tables to automatically clean up expired data.
+14. **Use Keyset pagination for efficient paging**: Avoid `LIMIT M, N` deep pagination (cost O(M+N), even larger in distributed systems); record the sort value of the last row in each batch as the WHERE condition for the next batch; when sort columns may have duplicates, use `(sort_column, id)` tuple comparison; ensure appropriate composite indexes on sort columns.
+15. **Use auto-add partitions for Range partitioned tables**: Leverage the TTL mechanism to automatically pre-create future partitions for time-type Range partitioned tables, preventing write failures due to insufficient partitions; set `TTL_CLEANUP = 'OFF'` for add-only mode; immediately run `CLEANUP EXPIRED DATA WITH TTL_CLEANUP = 'OFF'` after configuration to trigger the first pre-creation; requires version 5.4.20+.
+
+## Reference Links
+
+| Reference | Description |
+|-----------|-------------|
+| [references/create-table.md](references/create-table.md) | CREATE TABLE syntax, table types (single/broadcast/partitioned), partition strategies, secondary partitions, partition management |
+| [references/partition-design-best-practice.md](references/partition-design-best-practice.md) | Partition design best practices: partition key/GSI/algorithm/count selection, three-step migration, complete examples |
+| [references/primary-key-unique-key.md](references/primary-key-unique-key.md) | Primary key and unique key Global/Local classification, rules, risks, and recommendations |
+| [references/gsi.md](references/gsi.md) | Global Secondary Index GSI/UGSI/Clustered GSI creation, querying, and limitations |
+| [references/cci.md](references/cci.md) | Clustered Columnar Index CCI creation, usage, and applicable scenarios |
+| [references/sequence.md](references/sequence.md) | Sequence types (NEW/GROUP/SIMPLE/TIME), creation and usage |
+| [references/transactions.md](references/transactions.md) | Distributed transaction model, isolation levels, and considerations |
+| [references/mysql-compatibility-notes.md](references/mysql-compatibility-notes.md) | MySQL vs PolarDB-X compatibility differences and development limitations |
+| [references/explain.md](references/explain.md) | EXPLAIN command variants and execution plan diagnostics |
+| [references/ttl-table.md](references/ttl-table.md) | TTL table definition, cold data archiving, and cleanup scheduling |
+| [references/online-ddl.md](references/online-ddl.md) | Online DDL assessment, lock-free execution strategy, long transaction checks, DMS lock-free changes |
+| [references/pagination-best-practice.md](references/pagination-best-practice.md) | Efficient pagination: Keyset pagination, per-shard traversal, index requirements, Java examples |
+| [references/auto-add-range-parts.md](references/auto-add-range-parts.md) | Range partition auto-add: TTL-based partition pre-creation, first/second level configuration, management commands |

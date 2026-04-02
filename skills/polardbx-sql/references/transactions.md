@@ -1,44 +1,44 @@
 ---
-title: PolarDB-X 分布式事务
+title: PolarDB-X Distributed Transactions
 ---
 
-# PolarDB-X 分布式事务
+# PolarDB-X Distributed Transactions
 
-PolarDB-X 分布式版基于 TSO（Timestamp Oracle）全局时钟 + MVCC（多版本并发控制）+ 2PC（两阶段提交）实现分布式事务，保证跨分片事务的 ACID 特性。
+PolarDB-X Distributed Edition implements distributed transactions based on TSO (Timestamp Oracle) global clock + MVCC (Multi-Version Concurrency Control) + 2PC (Two-Phase Commit), guaranteeing ACID properties for cross-shard transactions.
 
-## 事务模型
+## Transaction Model
 
-- **TSO 全局时钟**：中心授时节点提供全局单调递增的时间戳，用于保证分布式一致性读。
-- **MVCC**：多版本并发控制，读取操作基于快照时间戳，不会读到中间状态。
-- **2PC**：跨多个 DN 的写入操作通过两阶段提交保障原子性。
+- **TSO Global Clock**: A central timestamp node provides globally monotonically increasing timestamps to ensure distributed consistent reads.
+- **MVCC**: Multi-version concurrency control where read operations are based on snapshot timestamps and never read intermediate states.
+- **2PC**: Write operations spanning multiple DNs use two-phase commit to guarantee atomicity.
 
-## 隔离级别
+## Isolation Levels
 
-PolarDB-X 支持以下隔离级别：
+PolarDB-X supports the following isolation levels:
 
-- **READ COMMITTED（RC）**：默认隔离级别。每条语句读取最新已提交的数据。
-- **REPEATABLE READ（RR）**：事务开始时获取快照，整个事务期间读取一致。
+- **READ COMMITTED (RC)**: Default isolation level. Each statement reads the latest committed data.
+- **REPEATABLE READ (RR)**: A snapshot is taken at transaction start; reads are consistent throughout the transaction.
 
 ```sql
--- 查看当前隔离级别
+-- View current isolation level
 SELECT @@transaction_isolation;
 
--- 设置隔离级别
+-- Set isolation level
 SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 ```
 
-## 事务语法
+## Transaction Syntax
 
 ```sql
--- 开启事务
+-- Start transaction
 BEGIN;
--- 或
+-- or
 START TRANSACTION;
 
--- 提交
+-- Commit
 COMMIT;
 
--- 回滚
+-- Rollback
 ROLLBACK;
 
 -- SAVEPOINT
@@ -47,16 +47,16 @@ ROLLBACK TO SAVEPOINT sp1;
 RELEASE SAVEPOINT sp1;
 ```
 
-## 单分片事务优化
+## Single-Shard Transaction Optimization
 
-当事务涉及的所有操作只落在**同一个分片**时，PolarDB-X 自动将其优化为本地事务（1PC），避免 2PC 的额外开销。设计分区表时尽量让同一事务的操作落在同一分片上，可以显著提升性能。
+When all operations in a transaction fall on the **same shard**, PolarDB-X automatically optimizes it to a local transaction (1PC), avoiding the overhead of 2PC. When designing partitioned tables, try to keep operations within the same transaction on the same shard to significantly improve performance.
 
-## 与 GSI 的关系
+## Relationship with GSI
 
-全局二级索引（GSI）的写入操作需要同时更新主表和索引表（可能在不同分片），因此 GSI 的正确运作依赖分布式事务支持（XA/TSO）。
+Write operations on Global Secondary Indexes (GSI) need to update both the primary table and the index table (which may be on different shards), so correct GSI operation depends on distributed transaction support (XA/TSO).
 
-## 注意事项
+## Considerations
 
-- **避免长事务**：长事务持有锁的时间长，影响并发性能，同时会阻碍 MVCC 版本回收。
-- **跨分片事务开销**：跨分片事务需要 2PC 协调，性能低于单分片事务。设计时尽量让高频事务操作局限在同一分片。
-- **大事务限制**：单个事务中修改的数据量过大时，可能触发内存限制。批量数据操作建议分批提交。
+- **Avoid long transactions**: Long transactions hold locks for extended periods, affecting concurrent performance and blocking MVCC version cleanup.
+- **Cross-shard transaction overhead**: Cross-shard transactions require 2PC coordination and perform worse than single-shard transactions. Design to keep high-frequency transaction operations within the same shard.
+- **Large transaction limits**: Modifying too much data in a single transaction may trigger memory limits. Batch data operations should be committed in batches.

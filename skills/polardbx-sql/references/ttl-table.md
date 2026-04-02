@@ -1,40 +1,40 @@
 ---
-title: PolarDB-X TTL 表与冷数据归档
+title: PolarDB-X TTL Tables and Cold Data Archiving
 ---
 
-# PolarDB-X TTL 表与冷数据归档
+# PolarDB-X TTL Tables and Cold Data Archiving
 
-TTL（Time-to-Live）表是 PolarDB-X 提供的自动数据生命周期管理能力。基于时间列定义数据过期规则，系统定期自动清理过期数据，可选将冷数据归档到低成本存储（OSS）。
+TTL (Time-to-Live) tables provide automatic data lifecycle management in PolarDB-X. Define data expiration rules based on time columns, and the system periodically cleans up expired data automatically, with optional archiving of cold data to low-cost storage (OSS).
 
-## TTL 定义
+## TTL Definition
 
-TTL 定义由三部分组成：
+A TTL definition consists of three parts:
 
-### TTL_EXPR（必需）
+### TTL_EXPR (Required)
 
-定义数据的存活时间条件：
-
-```
-TTL_EXPR = `时间列` EXPIRE AFTER 过期间隔 TIMEZONE '时区'
-```
-
-过期间隔支持：`N YEAR` / `N MONTH` / `N DAY`。
-
-### TTL_JOB（可选）
-
-定义清理任务的调度计划：
+Defines the data survival time condition:
 
 ```
-TTL_JOB = CRON 'cron表达式' TIMEZONE '时区'
+TTL_EXPR = `time_column` EXPIRE AFTER expiration_interval TIMEZONE 'timezone'
 ```
 
-默认为每天凌晨一点执行。
+Supported expiration intervals: `N YEAR` / `N MONTH` / `N DAY`.
 
-### 归档表（可选）
+### TTL_JOB (Optional)
 
-冷数据归档到 OSS 的归档表，详见冷数据归档文档。
+Defines the cleanup task scheduling plan:
 
-## 创建 TTL 表
+```
+TTL_JOB = CRON 'cron_expression' TIMEZONE 'timezone'
+```
+
+Defaults to executing daily at 1:00 AM.
+
+### Archive Table (Optional)
+
+Archive table for cold data archiving to OSS. See the cold data archiving documentation for details.
+
+## Creating a TTL Table
 
 ```sql
 CREATE TABLE t_order (
@@ -48,7 +48,7 @@ TTL = TTL_DEFINITION (
 );
 ```
 
-指定自定义清理调度：
+With a custom cleanup schedule:
 
 ```sql
 CREATE TABLE t_log (
@@ -62,11 +62,11 @@ TTL = TTL_DEFINITION (
 );
 ```
 
-## TTL 与 CCI 配合
+## TTL Combined with CCI
 
-CCI（列存索引）可以与 TTL 表结合，实现冷热数据分离：
-- **热数据**：在行存分区表中，支持高性能 OLTP 操作。
-- **冷数据**：通过 CCI 归档到列存（对象存储），降低存储成本，保留分析查询能力。
+CCI (Clustered Columnar Index) can be combined with TTL tables for hot/cold data separation:
+- **Hot data**: In the row-store partitioned table, supporting high-performance OLTP operations.
+- **Cold data**: Archived to columnar storage (object storage) via CCI, reducing storage costs while retaining analytical query capabilities.
 
 ```sql
 CREATE TABLE t_order (
@@ -81,22 +81,22 @@ TTL = TTL_DEFINITION (
 );
 ```
 
-## 管理 TTL 定义
+## Managing TTL Definitions
 
 ```sql
--- 查看表的 TTL 定义
+-- View TTL definition for a table
 SHOW CREATE TABLE t_order;
 
--- 修改 TTL 过期时间
+-- Modify TTL expiration time
 ALTER TABLE t_order
   MODIFY TTL SET TTL_EXPR = `gmt_modified` EXPIRE AFTER 6 MONTH TIMEZONE '+08:00';
 
--- 移除 TTL 定义（如果已有归档表，需先删除归档表）
+-- Remove TTL definition (if an archive table exists, drop it first)
 ALTER TABLE t_order REMOVE TTL;
 ```
 
-## 限制条件
+## Limitations
 
-- TTL 时间列必须为 `DATE` / `DATETIME` / `TIMESTAMP` 类型。
-- 删除 TTL 定义前，如果存在关联的归档表，需先删除归档表。
-- TTL 清理任务是后台异步执行的，数据不会在过期瞬间立刻删除。
+- TTL time columns must be `DATE` / `DATETIME` / `TIMESTAMP` types.
+- Before removing a TTL definition, if an associated archive table exists, it must be dropped first.
+- TTL cleanup tasks run asynchronously in the background; data is not deleted instantly upon expiration.

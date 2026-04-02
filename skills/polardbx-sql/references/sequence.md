@@ -1,28 +1,28 @@
 ---
-title: PolarDB-X Sequence 序列
+title: PolarDB-X Sequence
 ---
 
-# PolarDB-X Sequence 序列
+# PolarDB-X Sequence
 
-PolarDB-X 中的 Sequence 用于生成全局唯一的数字序列，主要用于主键或唯一索引列。在分布式场景下，Sequence 替代 MySQL 的 AUTO_INCREMENT 提供全局唯一性保证。
+Sequences in PolarDB-X generate globally unique numeric sequences, primarily used for primary key or unique index columns. In distributed scenarios, Sequences replace MySQL's AUTO_INCREMENT to provide global uniqueness guarantees.
 
-## Sequence 类型
+## Sequence Types
 
-### NEW SEQUENCE（默认，推荐）
+### NEW SEQUENCE (Default, Recommended)
 
-5.4.14 版本起引入，是当前**默认的 Sequence 类型**。核心特点：
+Introduced in version 5.4.14, this is the current **default Sequence type**. Key characteristics:
 
-- **连续自增**：在单个连接内生成的值严格连续递增，跨连接时也尽量保持递增趋势（与 GROUP SEQUENCE 的批量分段分配不同，不会出现大段跳跃）。
-- **全局唯一**：保证在分布式环境下生成的值全局唯一。
-- **基于持久化存储**：值分配基于底层存储节点，实例重启后能从上次位置继续分配，不会丢失或重复。
-- **高性能**：通过内部缓存机制保证分配效率，接近 GROUP SEQUENCE 的性能水平。
-- **可自定义**：支持 START WITH、INCREMENT BY、MAXVALUE、CYCLE 等参数（自定义特性需要 5.4.17+）。
+- **Sequential auto-increment**: Values generated within a single connection are strictly consecutive and increasing. Across connections, values also tend to increase (unlike GROUP SEQUENCE's batch segment allocation, there are no large gaps).
+- **Globally unique**: Guarantees global uniqueness in distributed environments.
+- **Persistence-based**: Value allocation is based on underlying storage nodes. After instance restart, allocation continues from the last position without loss or duplication.
+- **High performance**: Internal caching mechanism ensures allocation efficiency, approaching GROUP SEQUENCE performance levels.
+- **Customizable**: Supports START WITH, INCREMENT BY, MAXVALUE, CYCLE parameters (customization features require 5.4.17+).
 
 ```sql
--- 默认创建（等同于 CREATE NEW SEQUENCE）
+-- Default creation (equivalent to CREATE NEW SEQUENCE)
 CREATE SEQUENCE order_seq;
 
--- 指定参数
+-- With parameters
 CREATE NEW SEQUENCE order_seq
   START WITH 1
   INCREMENT BY 1
@@ -30,18 +30,18 @@ CREATE NEW SEQUENCE order_seq
   NOCYCLE;
 ```
 
-### GROUP SEQUENCE（旧默认类型）
+### GROUP SEQUENCE (Legacy Default Type)
 
-批量从数据库获取 ID 段缓存在内存中分配，性能高。每个节点独立缓存一段 ID，因此**跨节点分配的值不连续**（例如节点 A 分配 1-10000，节点 B 分配 10001-20000），起始值为 100001。
+Fetches ID segments in batch from the database and caches them in memory for allocation. High performance. Each node independently caches an ID segment, so **values allocated across nodes are not continuous** (e.g., Node A allocates 1-10000, Node B allocates 10001-20000). Starting value is 100001.
 
 ```sql
 CREATE GROUP SEQUENCE user_id_seq;
 
--- 指定起始值
+-- With starting value
 CREATE GROUP SEQUENCE user_id_seq START WITH 200001;
 ```
 
-单元化部署时使用 UNIT COUNT / INDEX：
+For unit-based deployment using UNIT COUNT / INDEX:
 
 ```sql
 CREATE GROUP SEQUENCE user_id_seq
@@ -51,7 +51,7 @@ CREATE GROUP SEQUENCE user_id_seq
 
 ### SIMPLE SEQUENCE
 
-支持自定义步长、最大值和循环，功能已被 NEW SEQUENCE 取代，不推荐新场景使用：
+Supports custom step, maximum value, and cycling. Functionality has been superseded by NEW SEQUENCE; not recommended for new use cases:
 
 ```sql
 CREATE SIMPLE SEQUENCE legacy_seq
@@ -63,40 +63,40 @@ CREATE SIMPLE SEQUENCE legacy_seq
 
 ### TIME SEQUENCE
 
-基于时间戳生成唯一 ID，列类型必须为 BIGINT：
+Generates unique IDs based on timestamps. The column type must be BIGINT:
 
 ```sql
 CREATE TIME SEQUENCE ts_seq;
 ```
 
-## 显式使用 Sequence
+## Explicit Sequence Usage
 
-### 获取值
+### Get Values
 
 ```sql
--- 获取单个值
+-- Get a single value
 SELECT order_seq.NEXTVAL FROM DUAL;
 
--- 批量获取 10 个值
+-- Get 10 values in batch
 SELECT order_seq.NEXTVAL FROM DUAL WHERE COUNT = 10;
 ```
 
-### 在 INSERT 中使用
+### Use in INSERT
 
 ```sql
 INSERT INTO t_order (order_id, buyer_id, amount)
 VALUES (order_seq.NEXTVAL, 12345, 99.90);
 ```
 
-### 查看所有 Sequence
+### View All Sequences
 
 ```sql
 SHOW SEQUENCES;
 ```
 
-## 隐式 Sequence
+## Implicit Sequence
 
-当表的列定义了 `AUTO_INCREMENT` 时，PolarDB-X 自动关联一个隐式 Sequence。用户无需手动创建和管理。
+When a table column is defined with `AUTO_INCREMENT`, PolarDB-X automatically associates an implicit Sequence. Users don't need to create or manage it manually.
 
 ```sql
 CREATE TABLE t_user (
@@ -105,25 +105,25 @@ CREATE TABLE t_user (
 ) PARTITION BY KEY(user_id) PARTITIONS 16;
 ```
 
-注意：隐式 Sequence 的类型取决于实例版本。5.4.14+ 版本默认使用 NEW SEQUENCE，AUTO_INCREMENT 在单连接内严格连续递增，跨连接也尽量保持递增趋势。5.4.14 之前的版本默认使用 GROUP SEQUENCE，跨节点分配的值不连续。
+Note: The implicit Sequence type depends on the instance version. Version 5.4.14+ defaults to NEW SEQUENCE, where AUTO_INCREMENT is strictly consecutive within a single connection and tends to increase across connections. Versions before 5.4.14 default to GROUP SEQUENCE, where values allocated across nodes are not continuous.
 
-## 修改和删除 Sequence
+## Modify and Drop Sequences
 
 ```sql
--- 修改参数
+-- Modify parameters
 ALTER SEQUENCE order_seq START WITH 500000 INCREMENT BY 5;
 
--- 修改类型（需指定 START WITH）
+-- Change type (START WITH must be specified)
 ALTER SEQUENCE order_seq CHANGE TO SIMPLE START WITH 1000000;
 
--- 删除
+-- Drop
 DROP SEQUENCE order_seq;
 ```
 
-## 限制
+## Limitations
 
-- 每个数据库最多 **16384 个 Sequence**。
-- NEW SEQUENCE 需要 5.4.14+ 版本；自定义特性需要 5.4.17+。
-- GROUP SEQUENCE 起始值为 100001，不支持从 1 开始。
-- TIME SEQUENCE 的列必须为 BIGINT 类型。
-- 单元化 GROUP SEQUENCE 不支持转换类型。
+- Maximum **16384 Sequences** per database.
+- NEW SEQUENCE requires version 5.4.14+; customization features require 5.4.17+.
+- GROUP SEQUENCE starts at 100001; cannot start from 1.
+- TIME SEQUENCE columns must be BIGINT type.
+- Unit-based GROUP SEQUENCE does not support type conversion.

@@ -1,93 +1,93 @@
 ---
-title: PolarDB-X 与 MySQL 兼容性说明
+title: PolarDB-X and MySQL Compatibility Notes
 ---
 
-# PolarDB-X 与 MySQL 兼容性说明
+# PolarDB-X and MySQL Compatibility Notes
 
-PolarDB-X 分布式版（企业版）高度兼容 MySQL 协议和语法，但由于分布式架构的差异，存在部分不支持或行为不同的地方。迁移 MySQL SQL 到 PolarDB-X 时，以此作为检查清单。
+PolarDB-X Distributed Edition (Enterprise Edition) is highly compatible with MySQL protocol and syntax, but due to distributed architecture differences, some features are unsupported or behave differently. Use this as a checklist when migrating MySQL SQL to PolarDB-X.
 
-## 检测 PolarDB-X 版本
+## Detecting PolarDB-X Version
 
 ```sql
 SELECT VERSION();
 ```
 
-通过返回值区分实例类型：
+Distinguish instance types by the return value:
 
-| 返回值示例 | 实例类型 | MySQL 兼容性 |
+| Return Value Example | Instance Type | MySQL Compatibility |
 |-----------|---------|-------------|
-| `5.7.25-TDDL-5.4.19-20251031` | **2.0 企业版（分布式版）** | 高度兼容，存在本文所列差异 |
-| `5.6.29-TDDL-5.4.12-16327949` | **DRDS 1.0**（版本号 <= 5.4.12） | 旧版本，本文不适用 |
-| `8.0.32-X-Cluster-8.4.20-20251017` | **2.0 标准版** | 100% 兼容 MySQL，无需关注本文 |
+| `5.7.25-TDDL-5.4.19-20251031` | **2.0 Enterprise Edition (Distributed Edition)** | Highly compatible, with differences listed in this document |
+| `5.6.29-TDDL-5.4.12-16327949` | **DRDS 1.0** (version <= 5.4.12) | Legacy version, this document does not apply |
+| `8.0.32-X-Cluster-8.4.20-20251017` | **2.0 Standard Edition** | 100% MySQL compatible, no need for this document |
 
-- 含 `TDDL` 且版本号 > 5.4.12 -> 2.0 企业版，版本号取 `TDDL-` 后的部分（如 `5.4.19`）。
-- 含 `TDDL` 且版本号 <= 5.4.12 -> DRDS 1.0，本 skill 不适用。
-- 含 `X-Cluster` -> 2.0 标准版，直接按 MySQL 语法处理即可。
+- Contains `TDDL` with version > 5.4.12 -> 2.0 Enterprise Edition, version number is the part after `TDDL-` (e.g., `5.4.19`).
+- Contains `TDDL` with version <= 5.4.12 -> DRDS 1.0, this skill does not apply.
+- Contains `X-Cluster` -> 2.0 Standard Edition, handle with standard MySQL syntax.
 
-## 不支持的 MySQL 特性（默认不要生成）
+## Unsupported MySQL Features (Do not generate by default)
 
-- 存储过程（Stored Procedures）和存储函数（Stored Functions）
-- 触发器（Triggers）
-- 事件调度器（Events）
-- 用户自定义函数（UDF）
-- `SPATIAL` / `GEOMETRY` 数据类型、空间函数和空间索引
+- Stored Procedures and Stored Functions
+- Triggers
+- Event Scheduler (Events)
+- User-Defined Functions (UDF)
+- `SPATIAL` / `GEOMETRY` data types, spatial functions, and spatial indexes
 - `LOAD XML`
-- `HANDLER` 语句
+- `HANDLER` statement
 - `IMPORT TABLE`
 - `INSERT DELAYED`
-- `STRAIGHT_JOIN`（使用标准 JOIN 替代）
-- `NATURAL JOIN`（使用显式 JOIN ON 替代）
-- `:=` 赋值运算符（将逻辑移到应用层）
-- XML 函数
-- GTID 函数
-- 全文检索函数（MySQL 的 FULLTEXT 不可用）
+- `STRAIGHT_JOIN` (use standard JOIN instead)
+- `NATURAL JOIN` (use explicit JOIN ON instead)
+- `:=` assignment operator (move logic to application layer)
+- XML functions
+- GTID functions
+- Full-text search functions (MySQL's FULLTEXT is not available)
 - `ALTER EVENT` / `ALTER INSTANCE` / `ALTER SERVER`
 - `CREATE EVENT` / `DROP EVENT`
 - `CREATE SERVER` / `DROP SERVER`
 - `CREATE SPATIAL REFERENCE SYSTEM`
 - `LOCK INSTANCE FOR BACKUP` / `UNLOCK INSTANCE`
-- 复制相关语句（`CHANGE MASTER TO`、`START/STOP SLAVE` 等）
-- 组复制语句（`START/STOP GROUP_REPLICATION`）
+- Replication statements (`CHANGE MASTER TO`, `START/STOP SLAVE`, etc.)
+- Group replication statements (`START/STOP GROUP_REPLICATION`)
 - `INSTALL/UNINSTALL COMPONENT/PLUGIN`
 
-## 部分支持或行为差异
+## Partially Supported or Behavioral Differences
 
-### 子查询限制
+### Subquery Limitations
 
-- `HAVING` 子句中**不支持子查询**，改写为 JOIN 或 CTE。
-- `JOIN ON` 子句中**不支持子查询**，将子查询提取为独立 JOIN。
-- 等号操作符的标量子查询正常支持。
+- Subqueries are **not supported in `HAVING` clauses**; rewrite as JOIN or CTE.
+- Subqueries are **not supported in `JOIN ON` clauses**; extract subqueries as independent JOINs.
+- Scalar subqueries with equality operators are supported normally.
 
-### DML 差异
+### DML Differences
 
-- `ON UPDATE CURRENT_TIMESTAMP` 的行为与 MySQL 不完全一致，建议在应用层显式设置更新时间。
-- 变量引用操作（`@c=1, @d=@c+1`）不支持。
+- `ON UPDATE CURRENT_TIMESTAMP` behavior is not fully consistent with MySQL; it's recommended to explicitly set update times in the application layer.
+- Variable reference operations (`@c=1, @d=@c+1`) are not supported.
 
-### SHOW 命令
+### SHOW Commands
 
-- `SHOW WARNINGS` 和 `SHOW ERRORS` 不支持 `LIMIT` 和 `COUNT` 组合。
-- `HELP` 命令不支持。
+- `SHOW WARNINGS` and `SHOW ERRORS` do not support `LIMIT` and `COUNT` combinations.
+- `HELP` command is not supported.
 
-### 关键字限制
+### Keyword Limitations
 
-- `MILLISECOND` 和 `MICROSECOND` 关键字不支持。
+- `MILLISECOND` and `MICROSECOND` keywords are not supported.
 
-### 数据类型限制
+### Data Type Limitations
 
-- `JSON` 类型不能做分区键。
-- `GEOMETRY` / `LINESTRING` 等空间类型不支持。
+- `JSON` type cannot be used as a partition key.
+- `GEOMETRY` / `LINESTRING` and other spatial types are not supported.
 
-## DDL 限制
+## DDL Limitations
 
-- 二级分区表暂不支持 Merge/Split/Add/Drop Subpartition。
-- 索引分区表暂不支持 Merge/Split/Add/Drop。
-- 支持外键。
-- 支持 Generated Column。
-- 支持 `RENAME TABLE`。
+- Secondary partitioned tables do not support Merge/Split/Add/Drop Subpartition.
+- Index partitioned tables do not support Merge/Split/Add/Drop.
+- Foreign keys are supported.
+- Generated Columns are supported.
+- `RENAME TABLE` is supported.
 
-## 标识符限制
+## Identifier Limitations
 
-| 类型 | 最大字符长度 |
+| Type | Maximum Character Length |
 |------|------------|
 | Database | 32 |
 | Table | 64 |
@@ -97,33 +97,33 @@ SELECT VERSION();
 | View | 64 |
 | Constraint | 64 |
 
-## 资源限制
+## Resource Limitations
 
-| 资源 | 限制 |
+| Resource | Limit |
 |------|------|
-| 每个数据库表数量 | 8192 |
-| 每张表列数量 | 1017 |
-| 每张表分区数量 | 8192 |
-| 每张表全局索引数量 | 32 |
-| 每个数据库 Sequence 数量 | 16384 |
-| 每个数据库视图数量 | 8192 |
-| 每个数据库用户数量 | 2048 |
-| 数据库数量 | 32 |
+| Tables per database | 8192 |
+| Columns per table | 1017 |
+| Partitions per table | 8192 |
+| Global indexes per table | 32 |
+| Sequences per database | 16384 |
+| Views per database | 8192 |
+| Users per database | 2048 |
+| Databases | 32 |
 
-## 字符集和排序规则
+## Character Sets and Collations
 
-- 默认字符集：`utf8mb4`。
-- 建议显式指定排序规则，避免依赖默认行为（PolarDB-X 的默认排序规则可能与 MySQL 不同）。
-- 如果依赖大小写不敏感比较，显式设置 `utf8mb4_general_ci` 排序规则。
+- Default character set: `utf8mb4`.
+- It's recommended to explicitly specify collations to avoid relying on default behavior (PolarDB-X's default collation may differ from MySQL's).
+- If case-insensitive comparison is needed, explicitly set `utf8mb4_general_ci` collation.
 
-## 兼容的 MySQL 特性（可以放心使用）
+## Compatible MySQL Features (Safe to Use)
 
-- 标准 DML：SELECT / INSERT / UPDATE / DELETE / REPLACE
-- 事务：BEGIN / COMMIT / ROLLBACK / SAVEPOINT
-- DDL：CREATE/ALTER/DROP TABLE / CREATE/DROP INDEX / CREATE/ALTER/DROP VIEW
-- 账户管理：CREATE/ALTER/DROP USER / GRANT / REVOKE
-- 预处理语句：PREPARE / EXECUTE / DEALLOCATE PREPARE
-- LOAD DATA（默认关闭，需手动开启）
+- Standard DML: SELECT / INSERT / UPDATE / DELETE / REPLACE
+- Transactions: BEGIN / COMMIT / ROLLBACK / SAVEPOINT
+- DDL: CREATE/ALTER/DROP TABLE / CREATE/DROP INDEX / CREATE/ALTER/DROP VIEW
+- Account management: CREATE/ALTER/DROP USER / GRANT / REVOKE
+- Prepared statements: PREPARE / EXECUTE / DEALLOCATE PREPARE
+- LOAD DATA (disabled by default, needs manual enablement)
 - LOCK TABLES
 - SET TRANSACTION
-- 大部分 SHOW 命令
+- Most SHOW commands
