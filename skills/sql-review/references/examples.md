@@ -114,19 +114,18 @@ Example response:
 }
 ```
 
-Create credential file and database:
+Create a MySQL option file, then create database:
 
-```bash
-# Write credentials to option file (never expose password in shell commands)
-cat > /tmp/sql_review_my.cnf << 'EOF'
+```ini
+; /tmp/sql_review_my.cnf
 [client]
 host=pxc-example.polarxmysql.rds.aliyuncs.com
 port=3306
 user=admin
 password=Ex@mple123
-EOF
-chmod 600 /tmp/sql_review_my.cnf
+```
 
+```bash
 mysql --defaults-extra-file=/tmp/sql_review_my.cnf -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
 ```
 
@@ -135,7 +134,7 @@ mysql --defaults-extra-file=/tmp/sql_review_my.cnf -e "CREATE DATABASE IF NOT EX
 Write DDL and stored procedures to a temp file, then execute:
 
 ```bash
-# Use Write tool to create /tmp/sql_review_setup.sql containing:
+# Create /tmp/sql_review_setup.sql containing:
 #   CREATE TABLE orders (...);
 #   CREATE TABLE order_items (...);
 #   CREATE TABLE customers (...);

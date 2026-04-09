@@ -20,11 +20,11 @@ Scan codebase for DDL and SQL queries, create tables on a PolarDB-X test instanc
 
 ## Workflow
 
-Use TodoWrite to track the following steps:
+Track progress on the following steps:
 
 ### Step 0: Confirm Scope and Database Edition
 
-Use AskUserQuestion to ask **both** questions simultaneously:
+Ask the user **both** questions simultaneously:
 
 **Question 1: Scan Scope**
 
@@ -54,7 +54,7 @@ Based on user selection:
 
 **Goal**: Collect all DDL and SQL statements within the scope defined in Step 0, produce a complete SQL inventory.
 
-**Important**: Use the Grep tool for multi-round searches with cross-validation. Do not rely on a single agent search.
+**Important**: Use multi-round searches with cross-validation. Do not rely on a single search pass.
 
 #### 1.1 Multi-round Search
 
@@ -108,7 +108,7 @@ The same column name across different tables uses the same anonymous name. Ensur
 
 #### 1.5.2 Persist Mapping File
 
-Use the Write tool to save the mapping to `/tmp/sql_review_name_mapping.md`:
+Save the mapping to `/tmp/sql_review_name_mapping.md`:
 
 ```markdown
 # SQL Review Name Mapping
@@ -127,7 +127,7 @@ Use the Write tool to save the mapping to `/tmp/sql_review_name_mapping.md`:
 | created_at  | c_p4wn    |
 ```
 
-> **Critical**: In subsequent steps (Step 4/5/6), **always use the Read tool to read this file** when the mapping is needed. Do NOT rely on conversation context memory. This prevents mapping loss in long sessions where context may be truncated.
+> **Critical**: In subsequent steps (Step 4/5/6), **always re-read this file** when the mapping is needed. Do NOT rely on conversation context memory. This prevents mapping loss in long sessions where context may be truncated.
 
 #### 1.5.3 Transform SQL
 
@@ -157,18 +157,15 @@ curl -s -X POST https://zero.polardbx.com/api/v1/instances \
   -d '{"tag": "sql-review", "ttlMinutes": 60, "edition": "<standard|enterprise>"}'
 ```
 
-Extract `host`, `port`, `username`, `password`, `instanceId` from the response. Write credentials to a MySQL option file to avoid exposing secrets in shell commands:
+Extract `host`, `port`, `username`, `password`, `instanceId` from the response. Create a MySQL option file to avoid exposing secrets in shell commands:
 
-```bash
-# Use the Write tool to create /tmp/sql_review_my.cnf
-cat > /tmp/sql_review_my.cnf << 'EOF'
+```ini
+; /tmp/sql_review_my.cnf
 [client]
 host=<host>
 port=<port>
 user=<username>
 password=<password>
-EOF
-chmod 600 /tmp/sql_review_my.cnf
 ```
 
 Verify connection and create database:
@@ -267,7 +264,7 @@ Full report format example in [references/examples.md](references/examples.md).
 
 ### Step 7: Cleanup
 
-Use AskUserQuestion to ask:
+Ask the user:
 
 | Option | Description |
 |--------|-------------|
