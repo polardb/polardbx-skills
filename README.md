@@ -18,8 +18,11 @@ skills/
 ├── polardbx-standard/     # PolarDB-X 标准版特性与运维
 │   ├── SKILL.md
 │   └── references/
-└── polardbx-zero/         # PolarDB-X Zero 一键创建临时实例
-    └── SKILL.md
+├── polardbx-zero/         # PolarDB-X Zero 一键创建临时实例
+│   └── SKILL.md
+└── sql-review/            # SQL Review 索引分析与推荐
+    ├── SKILL.md
+    └── references/
 ```
 
 后续可扩展更多 Skills（如 polardbx-java、polardbx-python 等）。
@@ -28,7 +31,8 @@ skills/
 
 - **polardbx-sql** - PolarDB-X 企业版 SQL 编写与 MySQL 兼容性处理（分区表、GSI、CCI、Sequence、分布式事务、EXPLAIN、TTL 表等）。
 - **polardbx-standard** - PolarDB-X 标准版独有特性、高可用架构、运维操作和性能最佳实践。
-- **polardbx-zero** - 通过 API 一键创建免认证的 PolarDB-X 临时实例（2C4G 标准版，30 天自动过期），适用于 AI agent 存储、MCP server 后端、临时测试等场景。
+- **polardbx-zero** - 通过 API 一键创建免认证的 PolarDB-X 临时实例（支持标准版和企业版，最长 30 天自动过期），适用于 AI agent 存储、MCP server 后端、临时测试等场景。
+- **sql-review** - 扫描代码库中的 SQL 语句，在 PolarDB-X 测试实例上通过 mock 数据 + EXPLAIN 分析索引使用情况，给出索引优化建议。支持全仓库扫描、指定模块、Git 增量扫描三种模式。
 
 ## 安装
 
