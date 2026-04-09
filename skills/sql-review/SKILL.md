@@ -16,7 +16,7 @@ Scan codebase for DDL and SQL queries, create tables on a PolarDB-X test instanc
 - `curl` must be available (for PolarDB-X Zero API calls to create/destroy instances)
 - `mysql` CLI client must be available (to connect and execute SQL)
 - If `mysql` is not available, prompt the user to install it (brew install mysql-client / apt install mysql-client / scoop install mysql)
-- In this document, `/tmp/` refers to the system temp directory. On Windows, use an equivalent writable path (e.g., the user's temp folder)
+- All temporary files use the `sql_review_` prefix. `$TMPDIR` in this document refers to a writable temp directory — determine the appropriate path for the current OS (e.g. `/tmp` on Linux/macOS, `%TEMP%` on Windows)
 
 ## Workflow
 
@@ -108,7 +108,7 @@ The same column name across different tables uses the same anonymous name. Ensur
 
 #### 1.5.2 Persist Mapping File
 
-Save the mapping to `/tmp/sql_review_name_mapping.md`:
+Save the mapping to `$TMPDIR/sql_review_name_mapping.md`:
 
 ```markdown
 # SQL Review Name Mapping
@@ -160,7 +160,7 @@ curl -s -X POST https://zero.polardbx.com/api/v1/instances \
 Extract `host`, `port`, `username`, `password`, `instanceId` from the response. Create a MySQL option file to avoid exposing secrets in shell commands:
 
 ```ini
-; /tmp/sql_review_my.cnf
+; $TMPDIR/sql_review_my.cnf
 [client]
 host=<host>
 port=<port>
@@ -171,16 +171,16 @@ password=<password>
 Verify connection and create database:
 
 ```bash
-mysql --defaults-extra-file=/tmp/sql_review_my.cnf -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
+mysql --defaults-extra-file=$TMPDIR/sql_review_my.cnf -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
 ```
 
-> In subsequent steps, `$MYSQL` refers to `mysql --defaults-extra-file=/tmp/sql_review_my.cnf sql_review_db`.
+> In subsequent steps, `$MYSQL` refers to `mysql --defaults-extra-file=$TMPDIR/sql_review_my.cnf sql_review_db`.
 
 ### Step 4: Create Tables and Populate Mock Data
 
 > All SQL in this step uses the anonymized table/column names from Step 1.5.
 
-1. **Create tables**: Write anonymized DDL to a temp .sql file, execute with `$MYSQL < /tmp/sql_review_ddl.sql`.
+1. **Create tables**: Write anonymized DDL to a temp .sql file, execute with `$MYSQL < $TMPDIR/sql_review_ddl.sql`.
 
 2. **Populate data**: Use stored procedures for bulk generation. Procedure names also use anonymous names (e.g. `gen_t_a3kf_data`). Write to .sql file and execute (`DELIMITER` only works in file mode):
    ```sql
@@ -204,7 +204,7 @@ mysql --defaults-extra-file=/tmp/sql_review_my.cnf -e "CREATE DATABASE IF NOT EX
 
 ### Step 5: EXPLAIN Analysis
 
-> **Before starting, Read `/tmp/sql_review_name_mapping.md`** to confirm the mapping. All SQL sent to the instance uses anonymous names.
+> **Before starting, Read `$TMPDIR/sql_review_name_mapping.md`** to confirm the mapping. All SQL sent to the instance uses anonymous names.
 
 Analyze each query from the Step 1 inventory by number. Skip pure INSERTs and primary-key-only lookups (mark as "skipped").
 
@@ -244,7 +244,7 @@ After completion, verify against the inventory that every query has been analyze
 
 ### Step 6: Output Report
 
-> **Before generating the report, Read `/tmp/sql_review_name_mapping.md`** and map all anonymous names back to real names. All table names, column names, and index names in the report must use real business names. Recommended index DDL should be directly executable in production.
+> **Before generating the report, Read `$TMPDIR/sql_review_name_mapping.md`** and map all anonymous names back to real names. All table names, column names, and index names in the report must use real business names. Recommended index DDL should be directly executable in production.
 
 **Must write report to file** `sql-review-report.md` (project root), and output a summary in the conversation.
 
@@ -271,7 +271,7 @@ Ask the user:
 | **Keep instance, let it auto-expire** | Instance will be automatically destroyed when TTL expires; user can connect manually to verify index effects in the meantime |
 | **Destroy immediately** | Release the instance now |
 
-Output instance connection info for the user's reference: `host`, `port`, `username`, remaining TTL. Remind user that credentials are stored in `/tmp/sql_review_my.cnf`.
+Output instance connection info for the user's reference: `host`, `port`, `username`, remaining TTL. Remind user that credentials are stored in `$TMPDIR/sql_review_my.cnf`.
 
 If user chooses to keep the instance, also output the name mapping table for reference (remind the user that table/column names on the instance are anonymized).
 
@@ -281,7 +281,7 @@ If user chooses to destroy immediately:
 curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/<instance_id>
 ```
 
-Regardless of choice, delete all temporary files at the end: `/tmp/sql_review_my.cnf`, `/tmp/sql_review_ddl.sql`, `/tmp/sql_review_*.sql`, `/tmp/sql_review_name_mapping.md`.
+Regardless of choice, delete all temporary files at the end: `$TMPDIR/sql_review_my.cnf`, `$TMPDIR/sql_review_ddl.sql`, `$TMPDIR/sql_review_*.sql`, `$TMPDIR/sql_review_name_mapping.md`.
 
 ## Index Design Principles
 

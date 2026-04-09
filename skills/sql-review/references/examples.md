@@ -117,7 +117,7 @@ Example response:
 Create a MySQL option file, then create database:
 
 ```ini
-; /tmp/sql_review_my.cnf
+; $TMPDIR/sql_review_my.cnf
 [client]
 host=pxc-example.polarxmysql.rds.aliyuncs.com
 port=3306
@@ -126,7 +126,7 @@ password=Ex@mple123
 ```
 
 ```bash
-mysql --defaults-extra-file=/tmp/sql_review_my.cnf -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
+mysql --defaults-extra-file=$TMPDIR/sql_review_my.cnf -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
 ```
 
 ### Step 4: Create Tables and Populate Mock Data
@@ -134,7 +134,7 @@ mysql --defaults-extra-file=/tmp/sql_review_my.cnf -e "CREATE DATABASE IF NOT EX
 Write DDL and stored procedures to a temp file, then execute:
 
 ```bash
-# Create /tmp/sql_review_setup.sql containing:
+# Create $TMPDIR/sql_review_setup.sql containing:
 #   CREATE TABLE orders (...);
 #   CREATE TABLE order_items (...);
 #   CREATE TABLE customers (...);
@@ -144,13 +144,13 @@ Write DDL and stored procedures to a temp file, then execute:
 #   DELIMITER ;
 #   CALL gen_orders();
 
-mysql --defaults-extra-file=/tmp/sql_review_my.cnf \
-  sql_review_db < /tmp/sql_review_setup.sql
+mysql --defaults-extra-file=$TMPDIR/sql_review_my.cnf \
+  sql_review_db < $TMPDIR/sql_review_setup.sql
 ```
 
 Verify data volume:
 ```bash
-mysql --defaults-extra-file=/tmp/sql_review_my.cnf \
+mysql --defaults-extra-file=$TMPDIR/sql_review_my.cnf \
   sql_review_db -e "
     SELECT 'orders' AS tbl, COUNT(*) AS cnt FROM orders
     UNION ALL SELECT 'order_items', COUNT(*) FROM order_items
