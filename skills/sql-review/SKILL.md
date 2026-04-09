@@ -4,7 +4,7 @@ description: |
   Scan codebase for table schemas (DDL) and SQL statements, create a PolarDB-X test instance with mock data, analyze index usage via EXPLAIN, and provide index optimization recommendations. Works with any language/framework.
   Use when user says "sql review", "SQL审查", "索引分析", "索引推荐", "index review", "SQL优化", "检查索引", "review sql", "分析SQL", "explain分析", "慢查询分析", "sql performance".
 metadata:
-  version: 0.1.0
+  version: 0.2.0
 ---
 
 # SQL Review - Index Analysis & Recommendations
@@ -16,6 +16,7 @@ Scan codebase for DDL and SQL queries, create tables on a PolarDB-X test instanc
 - `curl` must be available (for PolarDB-X Zero API calls to create/destroy instances)
 - `mysql` CLI client must be available (to connect and execute SQL)
 - If `mysql` is not available, prompt the user to install it (brew install mysql-client / apt install mysql-client / scoop install mysql)
+- In this document, `/tmp/` refers to the system temp directory. On Windows, use an equivalent writable path (e.g., the user's temp folder)
 
 ## Workflow
 
@@ -88,6 +89,52 @@ Output two structured tables:
 - Every table in DDL should appear in queries
 - All queries involving 2+ tables must have Key Features annotated
 
+### Step 1.5: Name Anonymization
+
+**Purpose**: Prevent business table/column names from leaking to the test instance. All SQL sent to the test instance uses randomized names only.
+
+#### 1.5.1 Build Mapping
+
+Generate random aliases for all table and column names from the Step 1 inventory:
+
+| Type | Rule | Example |
+|------|------|---------|
+| Table | `t_` + 4 random alphanumeric chars | `orders` -> `t_a3kf` |
+| Column | `c_` + 4 random alphanumeric chars | `user_id` -> `c_m9x2` |
+| Primary key | Always `c_pk` | `id` -> `c_pk` |
+| Index | `idx_` + 4 random chars | `idx_status_created` -> `idx_r4k1` |
+
+The same column name across different tables uses the same anonymous name. Ensure no collisions.
+
+#### 1.5.2 Persist Mapping File
+
+Use the Write tool to save the mapping to `/tmp/sql_review_name_mapping.md`:
+
+```markdown
+# SQL Review Name Mapping
+
+## Tables
+| Real Name | Anon Name |
+|-----------|-----------|
+| orders    | t_a3kf    |
+| users     | t_b7mq    |
+
+## Columns
+| Real Name   | Anon Name |
+|-------------|-----------|
+| id          | c_pk      |
+| user_id     | c_m9x2    |
+| created_at  | c_p4wn    |
+```
+
+> **Critical**: In subsequent steps (Step 4/5/6), **always use the Read tool to read this file** when the mapping is needed. Do NOT rely on conversation context memory. This prevents mapping loss in long sessions where context may be truncated.
+
+#### 1.5.3 Transform SQL
+
+Replace all table/column/index names in DDL and queries with anonymous names. Preserve data types and constraints (NOT NULL, UNIQUE, DEFAULT, etc.) unchanged.
+
+The transformed SQL is used for all subsequent interactions with the test instance.
+
 ### Step 2: Analyze Data Characteristics
 
 Infer data volume and distribution for each table from code:
@@ -120,37 +167,41 @@ mysql -h <host> -P <port> -u <user> -p<password> -e "CREATE DATABASE IF NOT EXIS
 
 ### Step 4: Create Tables and Populate Mock Data
 
-1. **Create tables**: Write DDL to a temp .sql file, execute with `$MYSQL < /tmp/sql_review_ddl.sql`.
+> All SQL in this step uses the anonymized table/column names from Step 1.5.
 
-2. **Populate data**: Use stored procedures for bulk generation, write to .sql file and execute (`DELIMITER` only works in file mode):
+1. **Create tables**: Write anonymized DDL to a temp .sql file, execute with `$MYSQL < /tmp/sql_review_ddl.sql`.
+
+2. **Populate data**: Use stored procedures for bulk generation. Procedure names also use anonymous names (e.g. `gen_t_a3kf_data`). Write to .sql file and execute (`DELIMITER` only works in file mode):
    ```sql
-   DROP PROCEDURE IF EXISTS gen_xxx_data;
+   DROP PROCEDURE IF EXISTS gen_t_a3kf_data;
    DELIMITER //
-   CREATE PROCEDURE gen_xxx_data()
+   CREATE PROCEDURE gen_t_a3kf_data()
    BEGIN
      DECLARE i INT DEFAULT 0;
      WHILE i < 10000 DO
-       INSERT INTO xxx (...) VALUES (...);
+       INSERT INTO t_a3kf (...) VALUES (...);
        SET i = i + 1;
      END WHILE;
    END //
    DELIMITER ;
-   CALL gen_xxx_data();
+   CALL gen_t_a3kf_data();
    ```
 
 3. **Mock data guidelines**: Field values should match enums/formats from code, time fields use random timestamps within recent N days, foreign keys reference existing IDs.
 
-4. **Verify**: `$MYSQL -e "SELECT 'tbl' AS t, COUNT(*) FROM tbl UNION ALL ..."`
+4. **Verify**: `$MYSQL -e "SELECT 't_a3kf' AS t, COUNT(*) FROM t_a3kf UNION ALL ..."`
 
 ### Step 5: EXPLAIN Analysis
+
+> **Before starting, Read `/tmp/sql_review_name_mapping.md`** to confirm the mapping. All SQL sent to the instance uses anonymous names.
 
 Analyze each query from the Step 1 inventory by number. Skip pure INSERTs and primary-key-only lookups (mark as "skipped").
 
 ```bash
 # Fetch sample values first (to avoid "no matching row" false results)
-$MYSQL -e "SELECT id FROM some_table LIMIT 1"
-# Then EXPLAIN
-$MYSQL -e "EXPLAIN SELECT * FROM some_table WHERE id = 'sample_value'"
+$MYSQL -e "SELECT c_pk FROM t_a3kf LIMIT 1"
+# Then EXPLAIN (using anonymized query)
+$MYSQL -e "EXPLAIN SELECT * FROM t_a3kf WHERE c_pk = 'sample_value'"
 ```
 
 **JOIN notes**: EXPLAIN outputs multiple rows; check driver table selection and driven table access method. LEFT JOIN driven table with type=ALL is a serious issue. JOIN condition columns must have indexes.
@@ -161,19 +212,19 @@ $MYSQL -e "EXPLAIN SELECT * FROM some_table WHERE id = 'sample_value'"
 - `rows`: higher = more urgently needs optimization
 - `Extra`: Using filesort / Using temporary -> needs attention
 
-**Index exploration**: For each problematic query (type=ALL, filesort, excessive rows), don't just try one index — enumerate multiple candidate index combinations based on columns in WHERE / JOIN / ORDER BY / GROUP BY (different column subsets, different column orderings), and verify each one:
+**Index exploration**: For each problematic query (type=ALL, filesort, excessive rows), don't just try one index — enumerate multiple candidate index combinations based on columns in WHERE / JOIN / ORDER BY / GROUP BY (different column subsets, different column orderings), and verify each one. Candidate indexes also use anonymous names:
 
 ```bash
-# Create candidate A
-$MYSQL -e "CREATE INDEX idx_candidate_a ON orders (status, created_at)"
+# Create candidate A (anonymous names)
+$MYSQL -e "CREATE INDEX idx_r4k1 ON t_a3kf (c_4fp1, c_8bq5)"
 $MYSQL -e "EXPLAIN SELECT ..."
 # Record results, then DROP and try next
-$MYSQL -e "DROP INDEX idx_candidate_a ON orders"
+$MYSQL -e "DROP INDEX idx_r4k1 ON t_a3kf"
 
 # Create candidate B
-$MYSQL -e "CREATE INDEX idx_candidate_b ON orders (status, region, created_at)"
+$MYSQL -e "CREATE INDEX idx_w7n2 ON t_a3kf (c_4fp1, c_m9x2, c_8bq5)"
 $MYSQL -e "EXPLAIN SELECT ..."
-$MYSQL -e "DROP INDEX idx_candidate_b ON orders"
+$MYSQL -e "DROP INDEX idx_w7n2 ON t_a3kf"
 ```
 
 Compare type / rows / Extra across all candidates, select the best and write to report. Preserve the exploration process in the report (EXPLAIN comparison of each candidate) so users can see the decision rationale.
@@ -181,6 +232,8 @@ Compare type / rows / Extra across all candidates, select the best and write to 
 After completion, verify against the inventory that every query has been analyzed or marked as skipped.
 
 ### Step 6: Output Report
+
+> **Before generating the report, Read `/tmp/sql_review_name_mapping.md`** and map all anonymous names back to real names. All table names, column names, and index names in the report must use real business names. Recommended index DDL should be directly executable in production.
 
 **Must write report to file** `sql-review-report.md` (project root), and output a summary in the conversation.
 
@@ -209,13 +262,15 @@ Use AskUserQuestion to ask:
 
 Output instance connection info for the user's reference: `host`, `port`, `username`, `password`, remaining TTL.
 
+If user chooses to keep the instance, also output the name mapping table for reference (remind the user that table/column names on the instance are anonymized).
+
 If user chooses to destroy immediately:
 
 ```bash
 curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/<instance_id>
 ```
 
-Finally, delete temporary SQL files.
+Regardless of choice, delete all temporary files at the end: `/tmp/sql_review_ddl.sql`, `/tmp/sql_review_*.sql`, `/tmp/sql_review_name_mapping.md`.
 
 ## Index Design Principles
 
