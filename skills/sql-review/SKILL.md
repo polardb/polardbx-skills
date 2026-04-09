@@ -157,13 +157,27 @@ curl -s -X POST https://zero.polardbx.com/api/v1/instances \
   -d '{"tag": "sql-review", "ttlMinutes": 60, "edition": "<standard|enterprise>"}'
 ```
 
-Extract `host`, `port`, `username`, `password`, `instanceId` from the response. Verify connection and create database:
+Extract `host`, `port`, `username`, `password`, `instanceId` from the response. Write credentials to a MySQL option file to avoid exposing secrets in shell commands:
 
 ```bash
-mysql -h <host> -P <port> -u <user> -p<password> -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
+# Use the Write tool to create /tmp/sql_review_my.cnf
+cat > /tmp/sql_review_my.cnf << 'EOF'
+[client]
+host=<host>
+port=<port>
+user=<username>
+password=<password>
+EOF
+chmod 600 /tmp/sql_review_my.cnf
 ```
 
-> In subsequent steps, `$MYSQL` refers to `mysql -h <host> -P <port> -u <user> -p<password> sql_review_db`.
+Verify connection and create database:
+
+```bash
+mysql --defaults-extra-file=/tmp/sql_review_my.cnf -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
+```
+
+> In subsequent steps, `$MYSQL` refers to `mysql --defaults-extra-file=/tmp/sql_review_my.cnf sql_review_db`.
 
 ### Step 4: Create Tables and Populate Mock Data
 
@@ -260,7 +274,7 @@ Use AskUserQuestion to ask:
 | **Keep instance, let it auto-expire** | Instance will be automatically destroyed when TTL expires; user can connect manually to verify index effects in the meantime |
 | **Destroy immediately** | Release the instance now |
 
-Output instance connection info for the user's reference: `host`, `port`, `username`, `password`, remaining TTL.
+Output instance connection info for the user's reference: `host`, `port`, `username`, remaining TTL. Remind user that credentials are stored in `/tmp/sql_review_my.cnf`.
 
 If user chooses to keep the instance, also output the name mapping table for reference (remind the user that table/column names on the instance are anonymized).
 
@@ -270,7 +284,7 @@ If user chooses to destroy immediately:
 curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/<instance_id>
 ```
 
-Regardless of choice, delete all temporary files at the end: `/tmp/sql_review_ddl.sql`, `/tmp/sql_review_*.sql`, `/tmp/sql_review_name_mapping.md`.
+Regardless of choice, delete all temporary files at the end: `/tmp/sql_review_my.cnf`, `/tmp/sql_review_ddl.sql`, `/tmp/sql_review_*.sql`, `/tmp/sql_review_name_mapping.md`.
 
 ## Index Design Principles
 

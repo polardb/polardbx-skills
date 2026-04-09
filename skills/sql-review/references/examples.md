@@ -114,11 +114,20 @@ Example response:
 }
 ```
 
-Create database:
+Create credential file and database:
 
 ```bash
-mysql -h pxc-example.polarxmysql.rds.aliyuncs.com -P 3306 -u admin -p'Ex@mple123' \
-  -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
+# Write credentials to option file (never expose password in shell commands)
+cat > /tmp/sql_review_my.cnf << 'EOF'
+[client]
+host=pxc-example.polarxmysql.rds.aliyuncs.com
+port=3306
+user=admin
+password=Ex@mple123
+EOF
+chmod 600 /tmp/sql_review_my.cnf
+
+mysql --defaults-extra-file=/tmp/sql_review_my.cnf -e "CREATE DATABASE IF NOT EXISTS sql_review_db"
 ```
 
 ### Step 4: Create Tables and Populate Mock Data
@@ -136,13 +145,13 @@ Write DDL and stored procedures to a temp file, then execute:
 #   DELIMITER ;
 #   CALL gen_orders();
 
-mysql -h pxc-example.polarxmysql.rds.aliyuncs.com -P 3306 -u admin -p'Ex@mple123' \
+mysql --defaults-extra-file=/tmp/sql_review_my.cnf \
   sql_review_db < /tmp/sql_review_setup.sql
 ```
 
 Verify data volume:
 ```bash
-mysql -h pxc-example.polarxmysql.rds.aliyuncs.com -P 3306 -u admin -p'Ex@mple123' \
+mysql --defaults-extra-file=/tmp/sql_review_my.cnf \
   sql_review_db -e "
     SELECT 'orders' AS tbl, COUNT(*) AS cnt FROM orders
     UNION ALL SELECT 'order_items', COUNT(*) FROM order_items
