@@ -1,10 +1,10 @@
-# Step 1.5: Name Anonymization
+# Step 3: Name Anonymization
 
 **Purpose**: Prevent business table/column names from leaking to the test instance. All SQL sent to the test instance uses randomized names only.
 
-## 1.5.1 Build Mapping
+## 3.1 Build Mapping
 
-Generate random aliases for all table and column names from the Step 1 inventory:
+Generate random aliases for all table and column names from the Step 2 inventory:
 
 | Type | Rule | Example |
 |------|------|---------|
@@ -21,7 +21,7 @@ When MyBatis is detected, also anonymize statement IDs:
 
 The same column name across different tables uses the same anonymous name. Ensure no collisions.
 
-## 1.5.2 Persist Mapping File
+## 3.2 Persist Mapping File
 
 Save the mapping to `$TMPDIR/sql_review_name_mapping.md`:
 
@@ -49,7 +49,7 @@ Save the mapping to `$TMPDIR/sql_review_name_mapping.md`:
 
 > **Critical**: In subsequent steps (Step 4/5/6), **always re-read this file** when the mapping is needed. Do NOT rely on conversation context memory. This prevents mapping loss in long sessions where context may be truncated.
 
-## 1.5.3 Transform SQL
+## 3.3 Transform SQL
 
 Replace all table/column/index names in DDL and queries with anonymous names. Preserve data types and constraints (NOT NULL, UNIQUE, DEFAULT, etc.) unchanged.
 

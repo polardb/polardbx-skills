@@ -2,11 +2,13 @@
 
 > **Before starting, Read `$TMPDIR/sql_review_name_mapping.md`** to confirm the mapping. All SQL sent to the instance uses anonymous names.
 
-> **Enterprise Edition note**: If the user chose **PolarDB-X Enterprise Edition** in Step 0, use `EXPLAIN EXECUTE` instead of `EXPLAIN` throughout this step.
+> **Enterprise Edition note**: If the user chose **PolarDB-X Enterprise Edition** in Step 1, use `EXPLAIN EXECUTE` instead of `EXPLAIN` throughout this step.
 
 ## Table-by-Table Processing
 
 **Read `$TMPDIR/sql_review_progress.md`** to get the list of tables and their queries. Process **one table at a time**:
+
+**[Aliyun mode] Priority sorting**: When the progress file Config section shows `Scope: 阿里云实例`, sort queries by `Freq × AvgRt` descending before processing. The production metrics (Freq, AvgRt, AvgRows) serve as reference context but EXPLAIN on the test instance is still the authoritative analysis method.
 
 For each table:
 

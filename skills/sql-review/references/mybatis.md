@@ -254,7 +254,7 @@ Each variant gets a sub-letter: `Q6a`, `Q6b`, `Q6c`, `Q6d`, with a descriptive l
 
 | Step | Behavior |
 |------|----------|
-| Step 1.5 (Anonymization) | All variants share the same table/column mapping |
+| Step 3 (Anonymization) | All variants share the same table/column mapping |
 | Step 2 (Data Characteristics) | No change — characteristics are per-table |
 | Step 4 (Mock Data) | No change — same mock data serves all variants |
 | Step 5 (EXPLAIN) | Each variant EXPLAINed independently; candidate indexes tested against ALL variants of the same query |

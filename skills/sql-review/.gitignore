@@ -1,0 +1,6 @@
+# Regression tests
+tests/
+
+# Internal design documents
+design.md
+design-mybatis-scan.md

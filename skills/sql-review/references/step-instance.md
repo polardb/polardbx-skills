@@ -1,6 +1,6 @@
-# Step 2-4: Test Instance Setup
+# Step 4: Test Instance Setup
 
-## Step 2: Analyze Data Characteristics
+## 4.1 Analyze Data Characteristics
 
 Infer data volume and distribution for each table from code:
 
@@ -12,9 +12,9 @@ Infer data volume and distribution for each table from code:
 
 Determine mock data volume: config tables 10-50 rows, business tables 5K-50K rows, log tables 100K+ rows.
 
-## Step 3: Create Test Instance
+## 4.2 Create Test Instance
 
-Based on user's database edition choice from Step 0:
+Based on user's database edition choice from Step 1:
 - Community MySQL / PolarDB-X Standard -> `"edition": "standard"`
 - PolarDB-X Enterprise -> `"edition": "enterprise"`
 
@@ -43,9 +43,9 @@ mysql --defaults-extra-file=$TMPDIR/sql_review_my.cnf -e "CREATE DATABASE IF NOT
 
 > In subsequent steps, `$MYSQL` refers to `mysql --defaults-extra-file=$TMPDIR/sql_review_my.cnf sql_review_db`.
 
-## Step 4: Create Tables and Populate Mock Data
+## 4.3 Create Tables and Populate Mock Data
 
-> All SQL in this step uses the anonymized table/column names from Step 1.5.
+> All SQL in this step uses the anonymized table/column names from Step 3.
 
 1. **Create tables**: Write anonymized DDL to a temp .sql file, execute with `$MYSQL < $TMPDIR/sql_review_ddl.sql`.
 

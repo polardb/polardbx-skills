@@ -1,6 +1,6 @@
-# Step 0-1: Confirm Scope & Scan Codebase
+# Step 1-2: Confirm Scope & Scan Codebase
 
-## Step 0: Confirm Scope and Database Edition
+## Step 1: Confirm Scope and Database Edition
 
 Ask the user **both** questions simultaneously:
 
@@ -11,6 +11,7 @@ Ask the user **both** questions simultaneously:
 | **Full repository** | Scan all SQL in the entire codebase, ideal for first-time review or full audit |
 | **Specific module/directory** | Only scan a user-specified directory (e.g. `src/services/`), ideal for targeted analysis |
 | **Recent Git commits** | Only scan SQL in files changed in the last N days (or N commits), ideal for incremental review |
+| **Aliyun instance** | Collect SQL insights and slow queries from a PolarDB-X 2.0 instance via `aliyun` CLI. No codebase needed |
 
 **Question 2: Database Edition**
 
@@ -26,11 +27,12 @@ Based on user selection:
   - Full repository: Grep searches from project root
   - Specific module: Grep searches within the user-specified directory
   - Git commits: First run `git log --since="N days ago" --name-only --diff-filter=ACMR` or `git log -N --name-only --diff-filter=ACMR` to get changed file list, Step 1 searches only within these files. DDL must still be searched repo-wide (changed queries may reference unchanged tables)
-- **Database edition**: Record the user's choice, pass the corresponding `edition` parameter when creating the instance in Step 3
+  - **Aliyun instance**: Skip code scanning entirely. Execute **Step 2 阿里云路径** (see [step-aliyun.md](step-aliyun.md)) instead. Step 3 (name anonymization) and all subsequent steps proceed as normal. Database edition is automatically set to PolarDB-X Enterprise.
+- **Database edition**: Record the user's choice, pass the corresponding `edition` parameter when creating the instance in Step 4
 
 ## Progress File
 
-**Initialize** `$TMPDIR/sql_review_progress.md` at the start of Step 1 and **append incrementally** throughout the entire workflow. This file is the single source of truth — if the agent's context is compressed during a long session, re-read this file to resume.
+**Initialize** `$TMPDIR/sql_review_progress.md` at the start of Step 2 and **append incrementally** throughout the entire workflow. This file is the single source of truth — if the agent's context is compressed during a long session, re-read this file to resume.
 
 ```markdown
 # SQL Review Progress
@@ -46,13 +48,13 @@ Based on user selection:
 
 **Rule**: After processing each table (scan OR explain), immediately append results to this file. Never batch multiple tables before saving.
 
-## Step 1: Scan Codebase
+## Step 2: Scan Codebase
 
-**Goal**: Collect all DDL and SQL statements within the scope defined in Step 0, produce a complete SQL inventory.
+**Goal**: Collect all DDL and SQL statements within the scope defined in Step 1, produce a complete SQL inventory.
 
 **Important**: Use multi-round searches with cross-validation. Do not rely on a single search pass.
 
-### 1.0 Framework Detection
+### 2.0 Framework Detection
 
 Before scanning, detect whether the project uses MyBatis:
 
@@ -61,12 +63,12 @@ Before scanning, detect whether the project uses MyBatis:
 3. If MyBatis mapper files are found:
    - Record the list of mapper files
    - Output: "Detected N MyBatis mapper files. Will use XML-structure-aware extraction."
-   - Proceed with both 1.1 (for DDL and non-mapper SQL) AND 1.2 (for mapper XML)
-4. If no MyBatis mapper files found: skip 1.2 entirely, proceed with 1.1 only
+   - Proceed with both 2.1 (for DDL and non-mapper SQL) AND 2.2 (for mapper XML)
+4. If no MyBatis mapper files found: skip 2.2 entirely, proceed with 2.1 only
 
-### 1.1 Multi-round Search
+### 2.1 Multi-round Search
 
-Within the scope defined in Step 0, search for the following patterns (excluding node_modules, dist, .git, target, etc.):
+Within the scope defined in Step 1, search for the following patterns (excluding node_modules, dist, .git, target, etc.):
 
 | Round | Pattern | Purpose |
 |-------|---------|---------|
@@ -82,23 +84,23 @@ Within the scope defined in Step 0, search for the following patterns (excluding
 
 For each round, use Read to view surrounding context (10 lines before/after) and extract the complete SQL (SQL in code often spans multiple lines).
 
-> When MyBatis is detected: Rounds 1-2 (DDL) still run on the full codebase. Rounds 3-9 may produce hits in mapper XML files — these can be ignored since Step 1.2 provides more accurate extraction from XML structure. Focus rounds 3-9 on non-XML files (Java/Kotlin code with raw SQL, annotation-based SQL like `@Select`, etc.).
+> When MyBatis is detected: Rounds 1-2 (DDL) still run on the full codebase. Rounds 3-9 may produce hits in mapper XML files — these can be ignored since Step 2.2 provides more accurate extraction from XML structure. Focus rounds 3-9 on non-XML files (Java/Kotlin code with raw SQL, annotation-based SQL like `@Select`, etc.).
 
-### 1.2 MyBatis Mapper Extraction
+### 2.2 MyBatis Mapper Extraction
 
-> **Only when MyBatis detected in Step 1.0.** This step extracts SQL using XML tag boundaries instead of regex, then expands dynamic SQL tags into executable SQL. Full tag expansion rules in [mybatis.md](mybatis.md).
+> **Only when MyBatis detected in Step 2.0.** This step extracts SQL using XML tag boundaries instead of regex, then expands dynamic SQL tags into executable SQL. Full tag expansion rules in [mybatis.md](mybatis.md).
 
-#### 1.2.0 Pre-scan: Collect SQL Fragments
+#### 2.2.0 Pre-scan: Collect SQL Fragments
 
 Before processing individual mappers, do a **quick first pass** to collect `<sql id="...">` fragments from ALL mapper files. Build a global fragment map: `{ "namespace.id" => content, "id" => content }`. This is needed because `<include refid="X"/>` may reference fragments from other mappers. Resolve recursively (depth limit 5).
 
-#### 1.2.1 Process Each Mapper — One at a Time
+#### 2.2.1 Process Each Mapper — One at a Time
 
 **Process mappers one by one.** For each mapper XML file:
 
 1. **Read** the full file
 2. **Extract** all `<select>`, `<insert>`, `<update>`, `<delete>` tags. Record `id` attribute + mapper `namespace` as statement ID (e.g., `OrderMapper.findOrderList`).
-3. **Inline** `<include refid="X"/>` using the global fragment map from 1.2.0
+3. **Inline** `<include refid="X"/>` using the global fragment map from 2.2.0
 4. **Expand** dynamic SQL tags per [mybatis.md](mybatis.md) Section 1. Primary variant = all `<if>` true (maximum expansion).
 5. **Multi-path analysis** for SELECT/COUNT with `<if>`/`<choose>` affecting WHERE columns. Generate 2-4 path variants (Full, Minimum, No-Identity, Key-Branch). Cap at 4, dedup by WHERE column set. Skip `<set>` / `insertSelective`. Full algorithm in [mybatis.md](mybatis.md) Section 3.
 6. **Normalize** placeholders: `#{param}` → `?`, flag `${param}` as injection risk. Strip XML tags, CDATA, `&gt;`/`&lt;`/`&amp;`.
@@ -117,9 +119,9 @@ Before processing individual mappers, do a **quick first pass** to collect `<sql
 
 > **Why one-at-a-time**: A project with 10+ mapper files (each 5-20KB) can consume 100KB+ of context. Processing and saving incrementally prevents context overflow and allows resumption if the session is compressed mid-way.
 
-### 1.3 Produce SQL Inventory
+### 2.3 Produce SQL Inventory
 
-The SQL inventory is the accumulation of all per-table sections saved in `$TMPDIR/sql_review_progress.md` during steps 1.1 and 1.2. After all mappers are processed, append a summary section:
+The SQL inventory is the accumulation of all per-table sections saved in `$TMPDIR/sql_review_progress.md` during steps 2.1 and 2.2. After all mappers are processed, append a summary section:
 
 ```markdown
 ## Summary
@@ -135,7 +137,7 @@ Column conventions in the per-table query tables:
 - Each variant gets a sub-number: Q1, Q1b, Q1c.
 - **Features** column must note: JOIN / LEFT JOIN / subquery / GROUP BY / ORDER BY / LIMIT / HAVING / dynamic ORDER BY, etc.
 
-### 1.4 Cross-validation
+### 2.4 Cross-validation
 
 - JOIN count >= Grep `\bJOIN\b` hit count
 - Every table in DDL should appear in queries
