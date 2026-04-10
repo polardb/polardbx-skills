@@ -287,3 +287,142 @@ curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/pxz_abc123
 - Q3 uses idx_created reverse scan + LIMIT 20 early termination; deep pagination (large OFFSET) will still degrade, consider Keyset pagination
 - Adding 2 indexes slightly increases INSERT overhead; orders table write frequency is moderate, impact is negligible
 ```
+
+## Example 2: Java + MyBatis (newbee-mall)
+
+Assume a Spring Boot + MyBatis e-commerce project with 9 MyBatis mapper XML files and 9 database tables.
+
+### Step 1.0: Framework Detection
+
+Glob `**/*Mapper*.xml` finds 9 files:
+```
+src/main/resources/mapper/AdminUserMapper.xml
+src/main/resources/mapper/CarouselMapper.xml
+src/main/resources/mapper/GoodsCategoryMapper.xml
+src/main/resources/mapper/IndexConfigMapper.xml
+src/main/resources/mapper/MallUserMapper.xml
+src/main/resources/mapper/NewBeeMallGoodsMapper.xml
+src/main/resources/mapper/NewBeeMallOrderItemMapper.xml
+src/main/resources/mapper/NewBeeMallOrderMapper.xml
+src/main/resources/mapper/NewBeeMallShoppingCartItemMapper.xml
+```
+
+All contain `<mapper namespace=...>`. MyBatis detected.
+
+### Step 1.2: MyBatis Mapper Extraction
+
+#### 1.2.1 Extract SQL Statements
+
+Reading `NewBeeMallOrderMapper.xml`, identify 14 SQL statements including:
+
+- `<select id="findNewBeeMallOrderList">` — the order listing query with dynamic WHERE
+- `<select id="getTotalNewBeeMallOrders">` — corresponding count query
+- `<sql id="Base_Column_List">` — column fragment
+
+#### 1.2.2 Inline Fragments
+
+`<include refid="Base_Column_List"/>` resolved to: `order_id, order_no, user_id, total_price, pay_status, pay_type, pay_time, order_status, extra_info, user_name, user_phone, user_address, is_deleted, create_time, update_time`
+
+#### 1.2.3 Expand Dynamic SQL
+
+Original `findNewBeeMallOrderList`:
+```xml
+<select id="findNewBeeMallOrderList" parameterType="Map" resultMap="BaseResultMap">
+  select <include refid="Base_Column_List"/>
+  from tb_newbee_mall_order
+  where is_deleted = 0
+  <if test="orderNo != null and orderNo != ''">and order_no = #{orderNo}</if>
+  <if test="userId != null">and user_id = #{userId}</if>
+  <if test="payType != null">and pay_type = #{payType}</if>
+  <if test="orderStatus != null">and order_status = #{orderStatus}</if>
+  <if test="startTime != null and startTime.trim() != ''">and create_time &gt; #{startTime}</if>
+  <if test="endTime != null and endTime.trim() != ''">and create_time &lt; #{endTime}</if>
+  order by create_time desc
+  <if test="start!=null and limit!=null">limit #{start},#{limit}</if>
+</select>
+```
+
+Primary variant (all `<if>` true):
+```sql
+SELECT order_id, order_no, user_id, ... FROM tb_newbee_mall_order
+WHERE is_deleted = 0 AND order_no = ? AND user_id = ?
+  AND pay_type = ? AND order_status = ?
+  AND create_time > ? AND create_time < ?
+ORDER BY create_time DESC LIMIT ?, ?
+```
+
+#### 1.2.4 Multi-Path Analysis
+
+Parameter classification:
+- **Search**: orderNo (highly selective when present)
+- **Identity**: userId (user-scoped vs admin)
+- **Filter**: payType, orderStatus
+- **Range**: startTime/endTime
+
+Generated paths:
+
+| Path | Label | Active `<if>` | WHERE Columns |
+|------|-------|---------------|---------------|
+| Q6a | All filters | All | order_no, user_id, pay_type, order_status, create_time range, is_deleted |
+| Q6b | Minimum (admin list) | None | is_deleted (fixed) |
+| Q6c | Admin + filters | payType, orderStatus, time range | pay_type, order_status, create_time range, is_deleted |
+
+### Step 5: EXPLAIN Analysis (Multi-Path)
+
+Analyze each variant independently (10,000 order rows):
+
+**Q6a (all filters):**
+```bash
+$MYSQL -e "EXPLAIN SELECT ... FROM t_a3kf WHERE c_del = 0 AND c_ono = 'ORD_000123' AND c_uid = 100 AND c_pt = 1 AND c_os = 1 AND c_ct > '2024-01-01' AND c_ct < '2024-12-31' ORDER BY c_ct DESC LIMIT 0, 20"
+```
+| type | key | rows | Extra |
+|------|-----|------|-------|
+| ALL | None | 9,987 | Using where; Using filesort |
+
+**Q6b (minimum — admin list):**
+```bash
+$MYSQL -e "EXPLAIN SELECT ... FROM t_a3kf WHERE c_del = 0 ORDER BY c_ct DESC LIMIT 0, 20"
+```
+| type | key | rows | Extra |
+|------|-----|------|-------|
+| ALL | None | 9,987 | Using where; Using filesort |
+
+Both variants show full table scan + filesort. Now explore indexes:
+
+**Index 1: `(user_id, order_status, is_deleted, create_time)` — targeting Q6a:**
+
+| Variant | type | key | rows | Extra |
+|---------|------|-----|------|-------|
+| Q6a | ref | idx_1 | 1 | Backward index scan |
+| Q6b | ALL | None | 9,987 | Using where; Using filesort |
+| Q6c | ALL | None | 9,987 | Using where; Using filesort |
+
+Index 1 perfectly serves Q6a but is useless for Q6b/Q6c (leftmost column `user_id` absent).
+
+**Index 2: `(is_deleted, create_time)` — targeting Q6b/Q6c:**
+
+| Variant | type | key | rows | Extra |
+|---------|------|-----|------|-------|
+| Q6a | ref | idx_1 | 1 | Backward index scan (still uses Index 1) |
+| Q6b | ref | idx_2 | 1 | Backward index scan |
+| Q6c | ref | idx_2 | 1 | Using where; Backward index scan |
+
+With both indexes, all 3 variants are covered.
+
+### Step 6: Report Output (Variant Grouping)
+
+```markdown
+#### Q6: NewBeeMallOrderMapper.findNewBeeMallOrderList (3 variants)
+
+| Variant | Active Conditions | Before (type/rows/Extra) | After (type/rows/Extra) | Covered By |
+|---------|-------------------|--------------------------|------------------------|------------|
+| Q6a (all filters) | orderNo + userId + payType + orderStatus + timeRange | ALL / 9,987 / filesort | ref / 1 / Backward index scan | Index 1 |
+| Q6b (admin list) | isDeleted only | ALL / 9,987 / filesort | ref / 1 / Backward index scan | Index 2 |
+| Q6c (admin + filters) | payType + orderStatus + timeRange | ALL / 9,987 / filesort | ref / 1 / Backward index scan | Index 2 |
+
+**Recommendations:**
+- Index 1: `CREATE INDEX idx_user_status_del_time ON tb_newbee_mall_order (user_id, order_status, is_deleted, create_time);`
+- Index 2: `CREATE INDEX idx_del_time ON tb_newbee_mall_order (is_deleted, create_time);`
+```
+
+**Key insight**: Without multi-path analysis, only Index 1 would have been recommended, leaving the admin view (Q6b) with a full table scan on 10,000 rows. The second index adds minimal write overhead but ensures all execution paths have index coverage.

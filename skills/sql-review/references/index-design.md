@@ -33,6 +33,39 @@ Cannot serve:
 If a query only needs columns in the index, MySQL can return data directly from the index (Extra: Using index), avoiding table lookups.
 For high-frequency queries, consider adding SELECT columns to the index.
 
+## Index Exploration Method
+
+For each problematic query (type=ALL, filesort, excessive rows), don't just try one index — enumerate multiple candidate index combinations and verify each one empirically via EXPLAIN.
+
+### Candidate Generation
+
+Based on the query's WHERE / JOIN / ORDER BY / GROUP BY columns, generate candidates by varying:
+- **Column subsets**: not all WHERE columns need to be in the index
+- **Column orderings**: equality columns first, range columns last, ORDER BY column at the tail
+- **Inclusion of ORDER BY**: adding the sort column can eliminate filesort
+
+### Verify-and-Compare Loop
+
+Test each candidate on the live test instance using a CREATE → EXPLAIN → DROP cycle:
+
+```bash
+# Create candidate A
+$MYSQL -e "CREATE INDEX idx_candidate_a ON t (col1, col2)"
+$MYSQL -e "EXPLAIN SELECT ..."   # or EXPLAIN EXECUTE for Enterprise Edition
+$MYSQL -e "DROP INDEX idx_candidate_a ON t"
+
+# Create candidate B
+$MYSQL -e "CREATE INDEX idx_candidate_b ON t (col1, col2, col3)"
+$MYSQL -e "EXPLAIN SELECT ..."
+$MYSQL -e "DROP INDEX idx_candidate_b ON t"
+```
+
+Compare `type` / `rows` / `Extra` across all candidates. Select the best and preserve the full exploration process in the report so users can see the decision rationale.
+
+### Cross-Variant Validation
+
+When a query has multiple execution path variants (e.g., from dynamic WHERE conditions), test each candidate index against ALL variants of the same query. If no single index covers all variants, recommend multiple indexes with a note on write overhead trade-off (see Pattern 7).
+
 ## Common Problem Patterns
 
 ### Pattern 1: No Index on WHERE Clause
@@ -81,6 +114,33 @@ CREATE INDEX idx_department ON employees(department)
 SELECT LEFT(created_at, 10) AS date, COUNT(*) FROM page_views GROUP BY LEFT(created_at, 10)
 -- Recommendation: add a redundant date column + index, or use a virtual column
 ```
+
+### Pattern 7: Dynamic WHERE Needs Multiple Indexes
+
+When the same query has multiple execution paths (e.g., MyBatis `<if>` conditions), different paths may need different indexes:
+
+```sql
+-- Path A (user view): identity param present, highly selective
+SELECT * FROM orders WHERE user_id = ? AND order_status = ? AND is_deleted = 0
+  ORDER BY create_time DESC LIMIT 20
+-- Best index: (user_id, order_status, is_deleted, create_time)
+
+-- Path B (admin view): no identity param, broad scan
+SELECT * FROM orders WHERE is_deleted = 0
+  ORDER BY create_time DESC LIMIT 20
+-- Index from Path A is useless here (leftmost column user_id not in WHERE)
+-- Needs: (is_deleted, create_time) or (create_time) for ORDER BY optimization
+```
+
+A single composite index `(user_id, order_status, is_deleted, create_time)` only serves Path A. Path B still does a full table scan + filesort. The solution is two indexes:
+
+1. `(user_id, order_status, is_deleted, create_time)` — for user-scoped queries
+2. `(is_deleted, create_time)` — for admin/unscoped queries
+
+**Trade-off**: Multiple indexes increase write overhead (each INSERT/UPDATE must maintain both indexes). Decision criteria:
+- If both paths are high-frequency in production, both indexes are justified
+- If one path is rare (e.g., admin view used only by internal tools), the index for the rare path may be lower priority
+- Assess via: method call sites, access logs, or business logic analysis
 
 ## Redundant Index Detection
 
