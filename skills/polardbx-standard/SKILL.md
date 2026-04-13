@@ -31,21 +31,58 @@ Identify instance type via `SELECT VERSION();`:
 3. Identify the operation type and refer to the corresponding section below.
 4. For SQL questions: Standard Edition is 100% MySQL compatible — use MySQL syntax directly, no special adaptation needed.
 
-## Key Features
+## Key Features Quick Reference
 
-- **X-Paxos HA**: Multi-node consensus protocol, automatic failure detection and leader election.
-- **Lizard Transaction System**: SCN-based MVCC replacing InnoDB's transaction visibility, 30% higher throughput and 53% lower latency than MySQL 8.0.32.
-- **Panda Index**: Deadlock-free unique index that eliminates Gap locks under RC isolation level.
-- **100% MySQL Compatible**: Full support for stored procedures, triggers, EVENTs, etc.
+### X-Paxos HA
+
+Multi-replica high availability based on X-Paxos consensus protocol. At most one Leader handles all writes; Followers participate in majority voting. Automatic failover with RPO=0 (zero data loss). Performance comparable to MySQL semi-synchronous replication.
+
+Monitoring commands:
+```sql
+-- Cluster topology (Leader only, returns empty on Followers)
+SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_GLOBAL;
+-- Local node status (CURRENT_LEADER, INSTANCE_TYPE)
+SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_LOCAL;
+-- Replication health (LOG_DELAY_NUM, APPLY_DELAY_NUM)
+SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_HEALTH;
+```
+
+### Lizard Transaction System
+
+SCN (System Commit Number) based MVCC replacing InnoDB's native transaction visibility. Write transactions commit by writing SCN to a Transaction Slot; read transactions compare record SCN against a single-number Vision (no active transaction ID array). Supports FlashBack Query via SCN.
+
+Performance vs MySQL 8.0.32 (Sysbench RW, 512 concurrency): **30% higher throughput, 53% lower latency**.
+
+### Panda Index
+
+Deadlock-free unique key index. Eliminates Gap locks under RC isolation by optimizing constraint checks to row-level lock granularity. No performance overhead; 28 extra bytes per unique index record.
+
+```sql
+-- Enable (session or global, no restart needed)
+SET opt_index_format_panda_enabled = ON;
+```
+
+- Default ON for instances created after 2025-06-04.
+- Requires storage node version >= xcluster8.4.20-20250527.
+- Only optimizes RC isolation; RR still uses Next-Key locks.
+- Existing indexes need manual rebuild (see [panda-index.md](references/panda-index.md)).
+
+### 100% MySQL Compatible
+
+Full support for stored procedures, triggers, EVENTs, etc. Use standard MySQL syntax for all SQL tasks.
 
 ## References
 
-- `skills/polardbx-standard/references/x-paxos-ha.md` - X-Paxos HA: consensus protocol, automatic failover, cluster monitoring SQL.
-- `skills/polardbx-standard/references/lizard-transaction.md` - Lizard transaction system: SCN-based MVCC, Cleanout optimization, performance benchmark.
-- `skills/polardbx-standard/references/panda-index.md` - Panda Index: deadlock-free unique index, eliminates Gap locks under RC isolation.
+| Reference | Description |
+|-----------|-------------|
+| [references/x-paxos-ha.md](references/x-paxos-ha.md) | X-Paxos HA: architecture, log fusion, automatic failover, cluster monitoring SQL |
+| [references/lizard-transaction.md](references/lizard-transaction.md) | Lizard transaction system: SCN-based MVCC, Cleanout optimization, performance benchmark |
+| [references/panda-index.md](references/panda-index.md) | Panda Index: deadlock-free unique key, enable/disable, upgrade existing indexes, FAQ |
 
 ## Playbooks
 
 Executable end-to-end verification steps. Agent should auto-execute all steps when instructed to "follow the instructions".
 
-- `skills/polardbx-standard/playbooks/test-panda-index.md` - Verify Panda Index eliminates Gap locks: establish baseline with regular unique key (confirm Gap locks exist), then verify no Gap locks with Panda Index.
+| Playbook | Description |
+|----------|-------------|
+| [playbooks/test-panda-index.md](playbooks/test-panda-index.md) | Verify Panda Index eliminates Gap locks: baseline with regular unique key, then verify with Panda Index |
