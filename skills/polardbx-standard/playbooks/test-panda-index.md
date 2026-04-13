@@ -1,16 +1,16 @@
 ---
-title: 验证 Panda Index 消除 Gap 锁
+title: Verify Panda Index Eliminates Gap Locks
 ---
 
-# 验证 Panda Index 消除 Gap 锁
+# Verify Panda Index Eliminates Gap Locks
 
-端到端验证 Panda Index 功能：通过对照实验证明 Panda Index 消除了 RC 隔离级别下唯一键的 Gap 锁。
+End-to-end verification: controlled experiment proving Panda Index eliminates Gap locks on unique keys under RC isolation level.
 
-功能详情参见 `skills/polardbx-standard/references/panda-index.md`。
+See `skills/polardbx-standard/references/panda-index.md` for feature details.
 
-## Step 1：获取实例
+## Step 1: Obtain Instance
 
-如果用户已提供连接信息，直接使用。否则，通过 PolarDB-X Zero 创建临时实例：
+If the user already provided connection info, use it directly. Otherwise, create a temporary instance via PolarDB-X Zero:
 
 ```bash
 curl -s -X POST https://zero.polardbx.com/api/v1/instances \
@@ -18,19 +18,19 @@ curl -s -X POST https://zero.polardbx.com/api/v1/instances \
   -d '{"tag": "panda-index-test", "ttlMinutes": 60}'
 ```
 
-从响应中提取 `host`、`port`、`username`、`password`。
+Extract `host`, `port`, `username`, `password` from the response.
 
-## Step 2：连接并确认版本
+## Step 2: Connect and Verify Version
 
 ```bash
 mysql -h <host> -P <port> -u <username> -p<password> -e "SELECT VERSION();"
 ```
 
-确认输出包含 `X-Cluster` 且版本 >= `xcluster8.4.20-20250527`。如不满足则中止并告知用户。
+Confirm output contains `X-Cluster` and version >= `xcluster8.4.20-20250527`. If not met, abort and inform the user.
 
-## Step 3：关闭 Panda Index，创建普通唯一键基准表
+## Step 3: Disable Panda Index, Create Baseline Table with Regular Unique Key
 
-先用普通唯一键建表，作为反向对照：
+Create a table with regular unique key as the control group:
 
 ```sql
 SET opt_index_format_panda_enabled = OFF;
@@ -50,14 +50,14 @@ INSERT INTO t_normal VALUES (1, 1);
 INSERT INTO t_normal VALUES (100, 100);
 ```
 
-## Step 4：反向验证 -- 普通唯一键存在 Gap 锁
+## Step 4: Control Test — Regular Unique Key Has Gap Locks
 
 ```sql
 BEGIN;
 DELETE FROM t_normal WHERE id = 1;
 INSERT INTO t_normal VALUES (2, 1);
 
--- 查看 uk1 上的锁，期望出现 S,GAP
+-- Check locks on uk1, expect S,GAP
 SELECT lock_data, lock_mode
 FROM performance_schema.data_locks
 WHERE object_name = 't_normal' AND index_name = 'uk1';
@@ -65,9 +65,9 @@ WHERE object_name = 't_normal' AND index_name = 'uk1';
 ROLLBACK;
 ```
 
-**预期结果**：`lock_mode` 列中出现 `S,GAP`，证明普通唯一键在 RC 隔离级别下"先删后插"会产生 Gap 锁。
+**Expected**: `lock_mode` column contains `S,GAP`, proving regular unique keys produce Gap locks on delete-then-insert under RC isolation.
 
-## Step 5：开启 Panda Index，创建 Panda 唯一键表
+## Step 5: Enable Panda Index, Create Panda Unique Key Table
 
 ```sql
 SET opt_index_format_panda_enabled = ON;
@@ -84,14 +84,14 @@ INSERT INTO t_panda VALUES (1, 1);
 INSERT INTO t_panda VALUES (100, 100);
 ```
 
-## Step 6：正向验证 -- Panda Index 无 Gap 锁
+## Step 6: Experiment Test — Panda Index Has No Gap Locks
 
 ```sql
 BEGIN;
 DELETE FROM t_panda WHERE id = 1;
 INSERT INTO t_panda VALUES (2, 1);
 
--- 查看 uk1 上的锁，期望只有 REC_NOT_GAP，没有 GAP 锁
+-- Check locks on uk1, expect only REC_NOT_GAP, no GAP locks
 SELECT lock_data, lock_mode
 FROM performance_schema.data_locks
 WHERE object_name = 't_panda' AND index_name = 'uk1';
@@ -99,28 +99,28 @@ WHERE object_name = 't_panda' AND index_name = 'uk1';
 ROLLBACK;
 ```
 
-**预期结果**：`lock_mode` 列只包含 `X,REC_NOT_GAP`，不出现 `S,GAP`。如果仍出现 `S,GAP`，说明 Panda Index 未生效，需检查参数和版本。
+**Expected**: `lock_mode` column contains only `X,REC_NOT_GAP`, no `S,GAP`. If `S,GAP` still appears, Panda Index is not active — check parameter and version.
 
-## Step 7：清理
+## Step 7: Cleanup
 
 ```sql
 DROP DATABASE IF EXISTS panda_test;
 ```
 
-如果实例是本次临时创建的且不再需要，可释放：
+If the instance was temporarily created and is no longer needed:
 
 ```bash
 curl -s -X DELETE https://zero.polardbx.com/api/v1/instances/<instance_id>
 ```
 
-## 判定标准
+## Pass/Fail Criteria
 
-- **通过**：Step 4 出现 `S,GAP`（普通唯一键有 Gap 锁）且 Step 6 无 `GAP` 类型锁（Panda Index 消除了 Gap 锁），两者形成对照。
-- **失败**：Step 4 未出现 `S,GAP`（基准不成立），或 Step 6 出现 `S,GAP`（Panda Index 未生效），或版本不满足前提条件。
+- **Pass**: Step 4 shows `S,GAP` (baseline confirmed) AND Step 6 shows no `GAP` locks (Panda Index effective).
+- **Fail**: Step 4 missing `S,GAP` (baseline invalid), OR Step 6 shows `S,GAP` (Panda Index ineffective), OR version prerequisite not met.
 
-## Step 8：输出测试报告
+## Step 8: Output Test Report
 
-所有步骤执行完毕后，直接向用户输出以下格式的 Markdown 报告（不写入文件），使用实际执行结果填充 `<>` 占位符：
+After all steps are completed, output the following Markdown report directly to the user (do not write to file). Fill `<>` placeholders with actual execution results:
 
 ~~~markdown
 # Panda Index 测试报告

@@ -1,60 +1,60 @@
 ---
-title: Panda Index — 避免死锁的唯一键索引
+title: Panda Index — Deadlock-Free Unique Key Index
 ---
 
-# Panda Index — 避免死锁的唯一键索引
+# Panda Index — Deadlock-Free Unique Key Index
 
-PolarDB-X 存储引擎提供的新一代多版本唯一键索引。通过原生 MVCC 能力，避免查询路径上跨索引访问的额外开销，并将全局区间约束检测优化为行级锁粒度，有效规避 Gap 锁导致的死锁和锁等待问题。
+A next-generation MVCC-based unique key index provided by PolarDB-X storage engine. It optimizes global range constraint checks to row-level lock granularity, effectively eliminating Gap locks and the resulting deadlocks/lock waits under RC isolation level.
 
-## 前提条件
+## Prerequisites
 
-- **实例系列**：标准版或企业版均支持。
-- **引擎版本**：MySQL 8.0。
-- **存储节点版本**：xcluster8.4.20-20250527 及以上（2025-05-27 发布的版本及之后）。
-- **没有实例？** 可通过 `polardbx-zero` skill 创建免费临时实例（2C4G 标准版）。
+- **Edition**: Standard Edition or Enterprise Edition.
+- **Engine version**: MySQL 8.0.
+- **Storage node version**: xcluster8.4.20-20250527 or later.
+- **No instance?** Use `polardbx-zero` skill to create a free temporary instance (2C4G Standard Edition).
 
-## 核心优势
+## Key Benefits
 
-- **消除不必要的 Gap 锁**：在 RC 隔离级别下，普通唯一键的"先删后插"等操作会产生 Gap 锁，阻塞不冲突的并发写入。Panda Index 将约束检测优化为行级锁粒度，避免此问题。
-- **减少死锁**：Gap 锁范围扩散是 MySQL 唯一键死锁的主要原因，Panda Index 从根本上消除此类场景。
-- **无额外性能开销**：benchmark 测试中性能均优于普通唯一键。唯一代价是每条唯一索引记录增加 28 字节（存储空间增长通常低于 5%）。
+- **Eliminates unnecessary Gap locks**: Under RC isolation, regular unique keys produce Gap locks on delete-then-insert operations, blocking non-conflicting concurrent writes. Panda Index reduces constraint checks to row-level lock granularity.
+- **Reduces deadlocks**: Gap lock range expansion is the primary cause of MySQL unique key deadlocks. Panda Index eliminates this class of deadlocks.
+- **No performance overhead**: Benchmarks show equal or better performance than regular unique keys. The only cost is 28 extra bytes per unique index record (storage growth typically < 5%).
 
-## 开启方式
+## How to Enable
 
-`opt_index_format_panda_enabled` 支持 session 级别和 global 级别设置：
+`opt_index_format_panda_enabled` supports session-level and global-level settings:
 
 ```sql
--- Session 级别：仅当前连接生效
+-- Session level: current connection only
 SET opt_index_format_panda_enabled = ON;
 
--- Global 级别：对所有新连接生效
+-- Global level: all new connections
 SET GLOBAL opt_index_format_panda_enabled = ON;
 ```
 
-也可以在控制台 **配置与管理** > **参数设置** > **存储层** 中修改，无需重启实例，即时生效。
+Can also be set via console: **Configuration & Management** > **Parameter Settings** > **Storage Layer**. No restart required, takes effect immediately.
 
-- 2025-06-04 之后新购实例默认开启。
-- 开启后，新建表或新建唯一键索引时自动使用 Panda Index 格式。
-- 关闭后，新建唯一键恢复为 MySQL 社区标准格式。
+- Enabled by default for instances created after 2025-06-04.
+- When ON, new tables and new unique indexes automatically use Panda Index format.
+- When OFF, new unique indexes revert to standard MySQL format.
 
-## 存量索引升级
+## Upgrading Existing Indexes
 
-已存在的唯一键不会自动转换为 Panda Index，需手动重建索引：
+Existing unique keys are not automatically converted. Rebuild manually:
 
 ```sql
--- 1. 创建新的 Panda Index 唯一键
+-- 1. Create new Panda Index unique key
 ALTER TABLE t1 ADD UNIQUE INDEX uk_new(c1);
 
--- 2. 更换索引名
+-- 2. Rename indexes
 ALTER TABLE t1 RENAME INDEX uk TO uk_old, RENAME INDEX uk_new TO uk;
 
--- 3. 删除原索引
+-- 3. Drop old index
 ALTER TABLE t1 DROP INDEX uk_old;
 ```
 
-## 使用示例
+## Usage Example
 
-### 数据准备
+### Data Setup
 
 ```sql
 CREATE TABLE t1(
@@ -68,27 +68,26 @@ INSERT INTO t1 VALUES (1,1);
 INSERT INTO t1 VALUES (100,100);
 ```
 
-### 并发场景对比
+### Concurrency Comparison
 
-Session 1（先删后插）：
+Session 1 (delete-then-insert):
 
 ```sql
 BEGIN;
 DELETE FROM t1 WHERE id = 1;
 INSERT INTO t1 VALUES (2, 1);
--- 事务未提交
+-- Transaction not committed
 ```
 
-Session 2（插入不冲突的数据）：
+Session 2 (insert non-conflicting data):
 
 ```sql
 INSERT INTO t1 VALUES (3, 2);
 ```
 
-**普通唯一键**：Session 2 被 Gap 锁阻塞，等待超时失败。
+**Regular unique key**: Session 2 blocked by Gap lock, times out.
 
 ```sql
--- 查看锁信息，可以看到 uk1 上的 GAP 锁
 SELECT lock_data, lock_mode
 FROM performance_schema.data_locks
 WHERE index_name = 'uk1';
@@ -103,7 +102,7 @@ WHERE index_name = 'uk1';
 +-----------+---------------+
 ```
 
-**Panda Index**：Session 2 立即成功，无 Gap 锁。
+**Panda Index**: Session 2 succeeds immediately, no Gap locks.
 
 ```sql
 SELECT lock_data, lock_mode
@@ -117,21 +116,19 @@ WHERE index_name = 'uk1';
 +-----------+---------------+
 ```
 
-## 注意事项
+## Notes
 
-- **隔离级别限制**：Panda Index 主要优化 RC 隔离级别下的 Gap 锁问题。在 RR 隔离级别下，为保证可重复读语义，系统仍使用 Next-Key 锁（记录锁 + Gap 锁），Panda Index 无法避免此级别下的 Gap 锁。
-- **不适用类型**：临时表、系统表、压缩表、多值索引不支持 Panda Index。
-- **版本不可降级**：使用了 Panda Index 的实例无法降级至不支持 Panda Index 的老版本。
-- **参数开关无风险**：开启或关闭 `opt_index_format_panda_enabled` 均无需重启实例，对现有业务无影响。
+- **Isolation level limitation**: Panda Index optimizes Gap locks under RC isolation only. Under RR isolation, Next-Key locks (record lock + Gap lock) are still used for repeatable-read semantics.
+- **Unsupported types**: Temporary tables, system tables, compressed tables, and multi-value indexes do not support Panda Index.
+- **No version downgrade**: Instances using Panda Index cannot be downgraded to versions without Panda Index support.
+- **Safe to toggle**: Enabling or disabling `opt_index_format_panda_enabled` requires no restart and has no impact on existing workloads.
 
-## 常见问题
+## FAQ
 
-**Q：升级为 Panda Index 后，为什么仍然出现涉及唯一键 Gap 锁的死锁？**
+**Q: After upgrading to Panda Index, why do I still see deadlocks involving unique key Gap locks?**
 
-检查隔离级别是否为 RR。Panda Index 消除的是 RC 隔离级别下为保证唯一键约束而加的 Gap 锁（参见 MySQL Bug #68021）。RR 隔离级别下的 Next-Key 锁模式无法避免。
+Check if the isolation level is RR. Panda Index eliminates Gap locks added under RC isolation for unique key constraint enforcement (see MySQL Bug #68021). Next-Key locks under RR isolation cannot be avoided.
 
-**Q：所有表类型都支持吗？**
+**Q: Are all table types supported?**
 
-标准版和企业版均支持。企业版中分区表、单表、广播表，DRDS 模式和 AUTO 模式的数据库均支持。
-
-
+Both Standard Edition and Enterprise Edition are supported. In Enterprise Edition, partitioned tables, single tables, broadcast tables, and both DRDS mode and AUTO mode databases are all supported.
