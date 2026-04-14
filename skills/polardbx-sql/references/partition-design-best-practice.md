@@ -61,9 +61,13 @@ Regardless of method, the goal is to obtain a **SQL template inventory for the t
 
 ### Basic Principles
 
-1. **Higher equality query ratio is better**: The proportion of SQL templates where this field appears as an equality condition (WHERE col = ?)
-2. **Higher cardinality is better**: The field should have sufficiently many distinct values with no obvious hotspots on certain values
-3. **Primary key/unique key bonus**: Primary keys and unique keys inherently have the highest cardinality, never produce hotspots, and have the most even distribution; selecting them as partition keys naturally maintains global uniqueness
+Partition key selection requires **comprehensive multi-dimensional analysis** — evaluate every candidate field on ALL dimensions below, then choose the one that scores best overall. Do NOT recommend based on a single dimension alone.
+
+1. **Equality query ratio**: The proportion of SQL templates where this field appears as an equality condition (WHERE col = ?)
+2. **Cardinality**: The field should have sufficiently many distinct values for even data distribution across partitions
+3. **Hotspot risk**: Assess whether a few values dominate a large portion of data. Even a high-cardinality field can have skew (e.g., buyer_id in order tables — some buyers generate far more orders than others)
+4. **Primary key / unique key status**: PKs/UKs inherently have the highest cardinality (unique per row), never produce hotspots, and guarantee the most even distribution; selecting them as partition keys also naturally maintains global uniqueness
+5. **Semantic analysis**: Infer likely query patterns from the table type and field meaning. For example, order_id in an order table will certainly be queried frequently (order detail lookups, payment callbacks, status checks), even if the user only mentions buyer_id queries
 
 ### Analysis Method
 
@@ -75,6 +79,8 @@ From SQL Insight results, evaluate each candidate field:
 | Write condition | Whether all UPDATE operations use this field |
 | Cardinality | Confirm the field's distinct value count and distribution evenness from a business perspective |
 | Hotspot risk | Assess whether a few values dominate a large portion of data |
+| PK/UK status | Whether the field is a primary key or unique key (highest cardinality, zero hotspot) |
+| Semantic analysis | Infer query patterns from table type and field meaning (e.g., order_id in an order table is certainly queried frequently) |
 
 ### Tips for Identifying Hotspots
 
@@ -93,6 +99,19 @@ Using the account table as an example, SQL Insight results show:
 | address | ~50% | High | No | No |
 
 **Conclusion**: Although base_account_id has the highest query ratio, its low cardinality and obvious hotspots make it unsuitable as a partition key. account_id as the primary key has the highest cardinality and no hotspots, making it the better partition key.
+
+### Example Analysis 2 — Order Table (nuanced case: both candidates have high cardinality)
+
+The user states "most queries filter by buyer_id, primary key is order_id". Comprehensive multi-dimensional analysis:
+
+| Candidate Field | Equality Query Ratio | Cardinality | Hotspot Risk | Is PK/UK | Semantic Analysis |
+|---------|------------|--------|----------|-------------|---------|
+| order_id | High — inferred from semantics: order detail lookups, status checks, payment callbacks are core operations of any order system | Highest (PK, unique per row) | None | Primary Key | Core identifier of an order table; query frequency is certainly high |
+| buyer_id | High — user explicitly states most queries filter by this | High (millions of buyers) | Potential — some active buyers may generate disproportionately many orders, causing data skew | No | Buyer dimension queries are frequent, but buyer_id distribution depends on business characteristics |
+
+**Comprehensive conclusion**: Both fields have high query ratios. However, order_id scores better on cardinality (unique per row vs. millions of distinct values), hotspot risk (zero vs. potential skew), and PK status. **Recommendation: order_id as partition key + Clustered GSI on buyer_id** to optimize buyer-dimension queries. Always recommend collecting actual SQL access pattern data (SQL Insight or alternatives) to verify the analysis before finalizing.
+
+> **Note**: This is a common pattern where the user mentions only one query dimension. Semantic analysis reveals that other dimensions (order_id lookups) are also frequent. Do not assume that unmentioned fields have low query frequency — always analyze from the table's business semantics.
 
 ## Step 3: GSI Selection
 
