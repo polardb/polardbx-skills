@@ -21,13 +21,13 @@ Not applicable to:
 - PolarDB-X 1.0 (DRDS 1.0)
 
 Identify instance type via `SELECT VERSION();`:
-- Contains `X-Cluster` (e.g. `8.0.32-X-Cluster-8.4.20-20251017`) -> **Standard Edition**, this skill applies.
-- Contains `TDDL` (e.g. `5.7.25-TDDL-5.4.19-20251031`) -> **Enterprise Edition**, use `polardbx-sql` skill.
+- Contains `X-Cluster` (e.g. `8.0.32-X-Cluster-8.4.20-20251017`) -> **Standard Edition**, this skill applies. NOTE: "X-Cluster" is the official version marker for Standard Edition. The "Cluster" here refers to Standard Edition's own 3-node X-Paxos cluster (Leader / Follower / Logger), NOT a distributed "Cluster Edition". Do NOT misinterpret it as Enterprise Edition.
+- Contains `TDDL` (e.g. `5.7.25-TDDL-5.4.19-20251031`) -> **Enterprise Edition (Distributed Edition)**. **HARD STOP — you MUST refuse**: Do NOT provide any Enterprise Edition advice (no partition design, no GSI, no distributed SQL). Respond only with: "Your instance is PolarDB-X 2.0 Enterprise Edition. This skill covers Standard Edition only. Please use the `polardbx-sql` skill for Enterprise Edition partition design and SQL guidance." Then stop. Do NOT continue even if the user insists.
 
 ## Core Workflow (Follow each time)
 
 1. Confirm the user has a Standard Edition instance. If not, use `polardbx-zero` skill to create a free temporary instance (2C4G, 30-day expiry).
-2. Run `SELECT VERSION();` to verify Standard Edition (contains `X-Cluster`).
+2. Run `SELECT VERSION();` to verify Standard Edition (must contain `X-Cluster`). If the result contains `TDDL` instead, this is Enterprise Edition — **HARD STOP**: refuse and redirect to `polardbx-sql` skill. Do NOT provide any advice.
 3. Identify the operation type and refer to the corresponding section below.
 4. For SQL questions: Standard Edition is 100% MySQL compatible — use MySQL syntax directly, no special adaptation needed.
 

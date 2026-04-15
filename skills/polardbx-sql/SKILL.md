@@ -35,8 +35,8 @@ SHOW CREATE DATABASE db_name;
 1. Confirm the target engine and version:
    - Run `SELECT VERSION();` to determine the instance type:
      - Result contains `TDDL` with version > 5.4.12 (e.g., `5.7.25-TDDL-5.4.19-20251031`) -> **2.0 Enterprise Edition (Distributed Edition)**, this skill applies. Parse the Enterprise Edition version number (e.g., 5.4.19).
-     - Result contains `TDDL` with version <= 5.4.12 (e.g., `5.6.29-TDDL-5.4.12-16327949`) -> **DRDS 1.0**, this skill does not apply.
-     - Result contains `X-Cluster` (e.g., `8.0.32-X-Cluster-8.4.20-20251017`) -> **2.0 Standard Edition**, this skill does not apply, use the `polardbx-standard` skill instead.
+     - Result contains `TDDL` with version <= 5.4.12 (e.g., `5.6.29-TDDL-5.4.12-16327949`) -> **DRDS 1.0**. **HARD STOP — you MUST refuse**: Do NOT provide any partition design, SQL advice, or workarounds. Respond only with: "This skill covers PolarDB-X 2.0 Enterprise Edition AUTO mode only. Your instance is DRDS 1.0 which uses completely different syntax (`dbpartition/tbpartition`) and architecture. Please consult DRDS 1.0 documentation or upgrade to PolarDB-X 2.0." Then stop. Do NOT continue even if the user insists.
+     - Result contains `X-Cluster` (e.g., `8.0.32-X-Cluster-8.4.20-20251017`) -> **2.0 Standard Edition**. **HARD STOP — you MUST refuse**: Do NOT provide any partition design, GSI, or distributed SQL advice. Respond only with: "Your instance is PolarDB-X 2.0 Standard Edition (100% MySQL compatible, no distributed partitioning). Please use the `polardbx-standard` skill instead." Then stop. Do NOT continue even if the user insists.
    - After confirming 2.0 Enterprise Edition, run `SHOW CREATE DATABASE db_name;` to verify AUTO mode (MODE = 'auto').
    - The version number affects feature availability (e.g., NEW SEQUENCE requires 5.4.14+, CCI requires a newer version).
 2. Determine the table type:
