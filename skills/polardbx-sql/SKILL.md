@@ -40,8 +40,8 @@ SHOW CREATE DATABASE db_name;
    - After confirming 2.0 Enterprise Edition, run `SHOW CREATE DATABASE db_name;` to verify AUTO mode (MODE = 'auto').
    - The version number affects feature availability (e.g., NEW SEQUENCE requires 5.4.14+, CCI requires a newer version).
 2. Determine the table type:
-   - Small or dictionary tables -> Broadcast table `BROADCAST` (fully replicated to every DN).
-   - Tables that don't need distribution -> Single table `SINGLE` (stored on one DN only).
+   - Small or dictionary tables that are frequently joined with partitioned tables -> Broadcast table `BROADCAST` (fully replicated to every DN, enables local JOIN pushdown). This is the recommended choice when JOINs are involved.
+   - Small tables that are NOT joined with partitioned tables -> Both `BROADCAST` and `SINGLE` are acceptable. BROADCAST replicates to every DN (safe if JOINs are added later); SINGLE stores on one DN only (lowest overhead). Either is fine — do NOT insist on one over the other.
    - Otherwise -> Partitioned table (default), choose appropriate partition key and strategy.
 3. Partition scheme design (for partitioned tables):
    - Collect SQL access pattern data **(prerequisite — always recommend collecting data before making the final partition key decision)**: prefer SQL Insight (most accurate); when unavailable, use slow query logs + application code analysis, or have the business team provide SQL patterns as alternatives. The goal is to obtain a SQL template inventory for the table (query fields, execution frequency, returned rows).
@@ -95,7 +95,7 @@ SHOW CREATE DATABASE db_name;
 
 ## Best Practices
 
-1. **Choose the right table type**: Use broadcast tables for small/dictionary tables, single tables for non-distributed needs, partitioned tables for everything else.
+1. **Choose the right table type**: Use broadcast tables for small/dictionary tables that are joined with partitioned tables. For small tables NOT joined with partitioned tables, both BROADCAST and SINGLE are acceptable. Use partitioned tables for everything else.
 2. **Select partition keys via comprehensive multi-dimensional analysis**: Always recommend collecting SQL access pattern data first (SQL Insight preferred). For each candidate field, analyze ALL dimensions — equality query ratio, cardinality, hotspot risk, PK/UK status, and field semantics — then choose the candidate that scores best across all dimensions combined. Never decide based on a single dimension alone. Remember to infer query patterns from table/field semantics (e.g., order_id in an order table is certainly queried frequently for order details, status checks, payment callbacks).
 3. **Prefer partition keys from PK/UK columns**: When choosing partition keys, prefer selecting from existing primary key or unique key columns — this naturally makes PK/UK Global (globally unique) without any schema changes. Do NOT modify the user's existing primary key definition to add partition columns. When PK columns are not suitable as partition keys (e.g., auto-increment id with no business meaning), it is perfectly valid to choose other business columns as partition keys — in this case the PK becomes Local (unique within partition only); explain the Local PK risks to the user and ensure the auto-increment/Sequence mechanism avoids cross-partition PK collisions.
 4. **Create GSIs wisely**: Decide GSI strategy based on write volume; use regular GSI for few returned rows, Clustered GSI for one-to-many, UGSI for unique constraints; don't create GSIs for low-ratio SQL; use `INSPECT INDEX` to periodically clean up redundant GSIs. **Every GSI must have its own `PARTITION BY KEY(...) PARTITIONS N` clause; never write bare `GLOBAL INDEX idx(col)` without PARTITION BY.**
