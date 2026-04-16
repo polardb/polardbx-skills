@@ -24,6 +24,15 @@ Identify instance type via `SELECT VERSION();`:
 - Contains `X-Cluster` (e.g. `8.0.32-X-Cluster-8.4.20-20251017`) -> **Standard Edition**, this skill applies. NOTE: "X-Cluster" is the official version marker for Standard Edition. The "Cluster" here refers to Standard Edition's own 3-node X-Paxos cluster (Leader / Follower / Logger), NOT a distributed "Cluster Edition". Do NOT misinterpret it as Enterprise Edition.
 - Contains `TDDL` (e.g. `5.7.25-TDDL-5.4.19-20251031`) -> **Enterprise Edition (Distributed Edition)**. **HARD STOP — you MUST refuse**: Do NOT provide any Enterprise Edition advice (no partition design, no GSI, no distributed SQL). Respond only with: "Your instance is PolarDB-X 2.0 Enterprise Edition. This skill covers Standard Edition only. Please use the `polardbx-sql` skill for Enterprise Edition partition design and SQL guidance." Then stop. Do NOT continue even if the user insists.
 
+## CRITICAL: "X-Cluster" Means Standard Edition, NOT Distributed
+
+Users often confuse "X-Cluster" with a distributed/cluster edition. You MUST correct this misconception immediately:
+
+- **`X-Cluster` in the version string = Standard Edition**. The "Cluster" refers to the internal 3-node X-Paxos consensus cluster (Leader / Follower / Logger) for high availability. It is NOT a distributed data cluster.
+- Standard Edition supports MySQL native partitioning (RANGE, LIST, HASH, KEY), but does NOT support Enterprise Edition-specific partition functions, distributed sharding, or GSI/CCI syntax.
+- When a user asks "is X-Cluster the distributed edition?" or "should I use partition design with X-Cluster?", answer clearly: **No. X-Cluster is Standard Edition. Use MySQL native partition syntax (PARTITION BY RANGE/LIST/HASH/KEY), not Enterprise Edition distributed partition syntax.**
+- Do NOT mention Enterprise Edition-specific features (distributed partition keys, GSI, CCI, auto-partition, table groups) in your answer — this confuses users into thinking they have those capabilities.
+
 ## Core Workflow (Follow each time)
 
 1. Confirm the user has a Standard Edition instance. If not, use `polardbx-zero` skill to create a free temporary instance (2C4G, 30-day expiry).
@@ -37,13 +46,18 @@ Identify instance type via `SELECT VERSION();`:
 
 Multi-replica high availability based on X-Paxos consensus protocol. At most one Leader handles all writes; Followers participate in majority voting. Automatic failover with RPO=0 (zero data loss). Performance comparable to MySQL semi-synchronous replication.
 
-Monitoring commands:
+Three essential monitoring views (always mention all three by name when discussing cluster health):
+
+1. **`INFORMATION_SCHEMA.ALISQL_CLUSTER_GLOBAL`** — Cluster topology (all nodes' roles, sync progress). **IMPORTANT: Only returns data on the Leader node; returns empty result set on Follower/Logger nodes.** If you get empty results, you are likely connected to a Follower — reconnect to the Leader.
+2. **`INFORMATION_SCHEMA.ALISQL_CLUSTER_LOCAL`** — Current node's local status. Key fields: `CURRENT_LEADER` (shows which node is Leader), `INSTANCE_TYPE` (Normal or Log). Use this to identify the current Leader address before querying ALISQL_CLUSTER_GLOBAL.
+3. **`INFORMATION_SCHEMA.ALISQL_CLUSTER_HEALTH`** — Replication health metrics. Key fields: `LOG_DELAY_NUM` (log shipping lag), `APPLY_DELAY_NUM` (log apply lag), `APPLY_DELAY_SECONDS`.
+
 ```sql
--- Cluster topology (Leader only, returns empty on Followers)
-SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_GLOBAL;
--- Local node status (CURRENT_LEADER, INSTANCE_TYPE)
+-- Step 1: Check local status and find the Leader address
 SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_LOCAL;
--- Replication health (LOG_DELAY_NUM, APPLY_DELAY_NUM)
+-- Step 2: Cluster topology (must run on Leader node, returns empty on Followers)
+SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_GLOBAL;
+-- Step 3: Replication health
 SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_HEALTH;
 ```
 

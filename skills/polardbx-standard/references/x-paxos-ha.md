@@ -43,30 +43,34 @@ The consensus protocol log is deeply integrated with MySQL native binlog:
 
 ## Monitoring SQL Commands
 
-### Cluster Global Status (Leader only)
+**IMPORTANT**: When explaining cluster monitoring to users, always mention all three views by name and explain the recommended query order.
+
+### Step 1: Local Instance Status — `ALISQL_CLUSTER_LOCAL`
+
+```sql
+SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_LOCAL;
+```
+
+**Always query this first** to identify the current Leader address before querying ALISQL_CLUSTER_GLOBAL.
+
+Key fields:
+- `CURRENT_LEADER`: Address and port of the current Leader node.
+- `INSTANCE_TYPE`: Replica type — Normal or Log.
+
+### Step 2: Cluster Global Status — `ALISQL_CLUSTER_GLOBAL` (Leader only)
 
 ```sql
 SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_GLOBAL;
 ```
 
-Returns cluster topology. Only the Leader node returns data; non-Leader nodes return empty results.
+Returns cluster topology. **CRITICAL: Only the Leader node returns data; non-Leader nodes return an empty result set.** If you get empty results, use `ALISQL_CLUSTER_LOCAL` to find the Leader address and reconnect.
 
 Key fields:
 - `ROLE`: Node role — Leader, Follower, or Learner.
 - `ELECTION_WEIGHT`: Election priority, used in cross-AZ disaster recovery to prefer same-AZ replicas.
 - `MATCH_INDEX`, `NEXT_INDEX`, `APPLIED_INDEX`: Consensus log synchronization progress.
 
-### Local Instance Status
-
-```sql
-SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_LOCAL;
-```
-
-Key fields:
-- `CURRENT_LEADER`: Address and port of the current Leader node.
-- `INSTANCE_TYPE`: Replica type — Normal or Log.
-
-### Replication Health (Leader only)
+### Step 3: Replication Health — `ALISQL_CLUSTER_HEALTH`
 
 ```sql
 SELECT * FROM INFORMATION_SCHEMA.ALISQL_CLUSTER_HEALTH;
