@@ -4,7 +4,7 @@ description: |
   Provide operational guidance, unique features, and best practices for PolarDB-X 2.0 Standard Edition (X-Cluster based). Standard Edition is 100% MySQL compatible at the SQL layer; this skill focuses on HA architecture, Lizard transaction system, Panda Index, and operational management.
   Triggers: "PolarDB-X standard", "PolarDB-X 标准版", "X-Cluster", "X-Paxos", "Panda Index", "Lizard", "SCN", "标准版运维", "standard edition", "高可用", "HA failover", "Lizard事务"
 metadata:
-  version: 0.2.0
+  version: 0.2.1
 ---
 
 # PolarDB-X Standard Edition (X-Cluster)
