@@ -3,9 +3,9 @@ name: polardbx-sql
 description: |
   Design partition schemes, select partition keys, create GSI, and write SQL for PolarDB-X 2.0 Enterprise Edition AUTO mode databases, handling PolarDB-X vs MySQL differences (partitioned tables, GSI, CCI, Sequence, table groups, TTL, pagination, etc.).
   Use when designing partition schemes, selecting partition keys, converting single tables to partitioned tables, creating GSI/CCI indexes, writing or migrating SQL for PolarDB-X, or diagnosing slow queries on PolarDB-X.
-  Triggers: "PolarDB-X SQL", "PolarDB-X create table", "partitioned table", "partition design", "partition scheme", "partition key", "GSI", "CCI", "Sequence", "MySQL migrate to PolarDB-X", "PolarDB-X compatibility", "single table to partitioned table", "convert to partitioned table", "large table", "table sharding", "distributed table", "AUTO mode", "pagination query", "Keyset pagination", "Range partition", "auto add partition", "PolarDB-X slow query", "full-shard scan"
+  Triggers: "PolarDB-X SQL", "PolarDB-X create table", "partitioned table", "partition design", "partition scheme", "partition key", "GSI", "CCI", "Sequence", "MySQL migrate to PolarDB-X", "PolarDB-X compatibility", "single table to partitioned table", "convert to partitioned table", "large table", "table sharding", "distributed table", "AUTO mode", "pagination query", "Keyset pagination", "Range partition", "auto add partition", "PolarDB-X slow query", "full-shard scan", "TTL", "冷数据归档", "数据过期", "cold data archive", "TTL table", "数据生命周期", "expire data", "TTL配置", "LOCAL PARTITION", "TTL 1.0", "local partition迁移", "TTL迁移"
 metadata:
-  version: 0.3.1
+  version: 0.3.2
 ---
 
 # PolarDB-X SQL (MySQL Compatibility Focus)
@@ -68,6 +68,10 @@ SHOW CREATE DATABASE db_name;
    - `EXPLAIN EXECUTE` to view the physical execution plan pushed down to DN.
    - `EXPLAIN SHARDING` to view shard scan details and check for full-shard scans.
    - `EXPLAIN ANALYZE` to actually execute and collect runtime statistics.
+7. When the user needs TTL (data expiration, cold data archiving, or auto-add partitions):
+   - **You MUST read [references/ttl-table.md](references/ttl-table.md) in full before generating any TTL SQL.** TTL syntax is unique to PolarDB-X and cannot be guessed — do NOT rely on general SQL knowledge or MySQL conventions.
+   - Never invent non-existent syntax such as `TTL_ACTION`, `TTL_COLUMN`, or `TTL = col + INTERVAL`. See the ANTI-PATTERNS in the Key Differences Quick Reference below.
+   - **Never recommend `LOCAL PARTITION BY RANGE` (TTL 1.0)** — it is DEPRECATED. If a user has an existing `LOCAL PARTITION` table, guide them to migrate to TTL 2.0.
 
 ## Key Differences Quick Reference
 
@@ -87,7 +91,52 @@ SHOW CREATE DATABASE db_name;
 - **Sequence**: Globally unique sequence, default type is `NEW SEQUENCE` (5.4.14+), distributed alternative to AUTO_INCREMENT.
 - **Distributed transactions**: Based on TSO global clock + MVCC + 2PC, strong consistency by default; single-shard transactions automatically optimized to local transactions.
 - **Table groups**: Tables with the same partition rules bound to the same table group, ensuring JOIN computation pushdown to avoid cross-shard data shuffling.
-- **TTL tables**: Automatic expiration and cleanup of cold data based on time columns, can work with CCI for hot/cold data separation.
+- **TTL tables**: Automatic expiration and cleanup of cold data based on time columns, can work with CCI for hot/cold data separation. **CRITICAL: TTL SQL syntax is unique to PolarDB-X and does NOT follow MySQL conventions. You MUST use the exact syntax below — never guess or invent TTL syntax.**
+  - **Correct ALTER TABLE TTL syntax**:
+    ```sql
+    ALTER TABLE `table_name`
+    MODIFY TTL
+    SET
+    TTL_ENABLE = 'ON',
+    TTL_CLEANUP = 'OFF',
+    TTL_EXPR = `time_col` EXPIRE AFTER 3 MONTH TIMEZONE '+08:00',
+    TTL_JOB = CRON '0 0 2 */1 * ? *' TIMEZONE '+08:00',
+    TTL_PART_INTERVAL = INTERVAL(1, MONTH),
+    ARCHIVE_TYPE = 'ROW',
+    ARCHIVE_TABLE_PRE_ALLOCATE = 3,
+    ARCHIVE_TABLE_POST_ALLOCATE = 48;
+    ```
+  - **TTL_EXPR by column type**:
+    - DATETIME/TIMESTAMP/DATE: `TTL_EXPR = \`col\` EXPIRE AFTER N {DAY|MONTH|YEAR} TIMEZONE '+08:00'`
+    - INT/BIGINT (Unix seconds): `TTL_EXPR = FROM_UNIXTIME(\`col\`) EXPIRE AFTER N {DAY|MONTH|YEAR} TIMEZONE '+08:00'`
+    - INT/BIGINT (Unix milliseconds): `TTL_EXPR = FROM_UNIXTIME(\`col\`/1000) EXPIRE AFTER N {DAY|MONTH|YEAR} TIMEZONE '+08:00'`
+    - INT/BIGINT (non-timestamp, monotonic): `TTL_EXPR = \`col\` EXPIRE OVER M PARTITIONS`
+  - **ARCHIVE_TYPE values**: `'ROW'` (row-based, supports GSI), `'PARTITION'` (first-level Range), `'SUBPARTITION'` (second-level Range). No other values exist.
+  - **Create archive table**: `CREATE TABLE \`arc_name\` LIKE \`table_name\` ENGINE = 'Columnar' ARCHIVE_MODE = 'TTL';`
+  - **ANTI-PATTERNS — these do NOT exist in PolarDB-X, NEVER use them**:
+    - ❌ `TTL = col + INTERVAL 14 DAY` — wrong, use `MODIFY TTL SET TTL_EXPR = ...`
+    - ❌ `TTL_ACTION = ARCHIVE` — does not exist, use `ARCHIVE_TYPE = 'ROW'`
+    - ❌ `TTL_COLUMN = 'col'` — does not exist, use `TTL_EXPR = \`col\` EXPIRE AFTER ...`
+    - ❌ `ALTER TABLE t TTL = ...` — wrong, use `ALTER TABLE t MODIFY TTL SET ...`
+    - ❌ `LOCAL PARTITION BY RANGE ...` — **DEPRECATED (TTL 1.0)**, never recommend this for new tables. If a user has an existing `LOCAL PARTITION` table, guide them to migrate to TTL 2.0 (see below).
+  - **Version requirements**: Row-based archiving >= `5.4.19`; Partition-based archiving >= `5.4.20`. Check with `SELECT VERSION();` before recommending partition-based TTL.
+  - **LOCAL PARTITION (TTL 1.0) is DEPRECATED**: Never recommend `LOCAL PARTITION BY RANGE` for any new table. It is the legacy TTL 1.0 mechanism and is mutually exclusive with TTL 2.0. If a user has an existing `LOCAL PARTITION` table, guide them to migrate to TTL 2.0 via `ALTER TABLE t REMOVE LOCAL PARTITIONING` then apply TTL 2.0 definition. See migration workflow in [references/ttl-table.md](references/ttl-table.md).
+  - **CREATE TABLE inline TTL**: PolarDB-X supports embedding TTL in CREATE TABLE via `TTL = TTL_DEFINITION(...)` syntax. `ARCHIVE_TABLE_NAME` must be empty — the archive table must be created separately. Example:
+    ```sql
+    CREATE TABLE `t` (..., INDEX `idx_time`(`time_col`))
+    TTL = TTL_DEFINITION(
+      TTL_ENABLE = 'OFF',
+      TTL_EXPR = `time_col` EXPIRE AFTER 3 MONTH TIMEZONE '+08:00',
+      TTL_JOB = CRON '0 0 2 */1 * ? *' TIMEZONE '+08:00',
+      ARCHIVE_TYPE = 'ROW',
+      ARCHIVE_TABLE_PRE_ALLOCATE = 3,
+      ARCHIVE_TABLE_POST_ALLOCATE = 48
+    )
+    PARTITION BY KEY(`id`) PARTITIONS 16;
+    ```
+  - **Key constraints**: (1) Broadcast tables do NOT support TTL; (2) Single tables only support ARCHIVE_TYPE='ROW'; (3) Row-based requires local index on TTL column; (4) Partition-based requires Range partition on TTL column and NO MAXVALUE partition; (5) Partition-based does NOT support GSI; (6) TTL_CLEANUP must stay 'OFF' until archive table creation completes.
+  - **TTL management operations**: View definition: `SELECT * FROM INFORMATION_SCHEMA.TTL_INFO WHERE TABLE_SCHEMA='db' AND TABLE_NAME='t';`. Manually trigger: `ALTER TABLE t CLEANUP EXPIRED DATA ASYNC=TRUE;`. Remove TTL: must drop archive table first, then `ALTER TABLE t REMOVE TTL;`. For all management commands, read [references/ttl-table.md](references/ttl-table.md).
+  - For complete workflow and all examples, read [references/ttl-table.md](references/ttl-table.md).
 - **Unsupported MySQL features**: Stored procedures/triggers/EVENTs/SPATIAL/GEOMETRY/LOAD XML/HANDLER, etc.
 - **STRAIGHT_JOIN / NATURAL JOIN not supported**: Use standard JOIN syntax instead.
 - **:= assignment operator not supported**: Move logic to the application layer.
@@ -107,9 +156,9 @@ SHOW CREATE DATABASE db_name;
 10. **Avoid subqueries in HAVING/JOIN ON**: Rewrite as JOINs or CTEs.
 11. **Use EXPLAIN commands for diagnosis**: For SQL performance issues, prefer `EXPLAIN SHARDING` and `EXPLAIN ANALYZE`.
 12. **Check long transactions before Online DDL**: Check for long transactions before executing DDL to avoid MDL lock waits.
-13. **Use TTL tables to manage cold data**: For large tables with time attributes, use TTL tables to automatically clean up expired data.
+13. **Use TTL tables to manage cold data**: For large tables with time attributes, use TTL tables to automatically clean up expired data. **TTL SQL syntax is PolarDB-X-specific — always read [references/ttl-table.md](references/ttl-table.md) before generating TTL SQL.** Never guess TTL syntax; common hallucinated constructs like `TTL_ACTION`, `TTL_COLUMN`, or `TTL = col + INTERVAL` do not exist in PolarDB-X.
 14. **Use Keyset pagination for efficient paging**: Avoid `LIMIT M, N` deep pagination (cost O(M+N), even larger in distributed systems); record the sort value of the last row in each batch as the WHERE condition for the next batch; when sort columns may have duplicates, use `(sort_column, id)` tuple comparison; ensure appropriate composite indexes on sort columns.
-15. **Use auto-add partitions for Range partitioned tables**: Leverage the TTL mechanism to automatically pre-create future partitions for time-type Range partitioned tables, preventing write failures due to insufficient partitions; set `TTL_CLEANUP = 'OFF'` for add-only mode; immediately run `CLEANUP EXPIRED DATA WITH TTL_CLEANUP = 'OFF'` after configuration to trigger the first pre-creation; requires version 5.4.20+.
+15. **Use auto-add partitions for Range partitioned tables**: Leverage the TTL mechanism to automatically pre-create future partitions for time-type Range partitioned tables, preventing write failures due to insufficient partitions; set `TTL_CLEANUP = 'OFF'` for add-only mode; immediately run `CLEANUP EXPIRED DATA WITH TTL_CLEANUP = 'OFF'` after configuration to trigger the first pre-creation; requires version 5.4.20+. See [references/auto-add-range-parts.md](references/auto-add-range-parts.md) for full configuration and [references/ttl-table.md](references/ttl-table.md) for the underlying TTL mechanism.
 
 ## Reference Links
 

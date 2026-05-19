@@ -740,7 +740,7 @@ TTL_CLEANUP = 'ON';
 1. **Broadcast tables in AUTO mode do NOT support TTL definitions** -- TTL cannot be applied to broadcast tables at all.
 2. **Single tables in AUTO mode only support row-based archiving** (ARCHIVE_TYPE = 'ROW') -- partition-based archiving is not available for single tables.
 3. **DRDS mode tables do NOT support TTL** -- only AUTO mode database tables are supported.
-4. **Tables using Local Partition (TTL 1.0) cannot use TTL 2.0** -- they are mutually exclusive.
+4. **Tables using Local Partition (TTL 1.0) cannot use TTL 2.0** -- they are mutually exclusive. **LOCAL PARTITION (TTL 1.0) is DEPRECATED — do NOT recommend it for new tables.** If a user has an existing LOCAL PARTITION table, guide them to migrate to TTL 2.0 (see the "Migrating from TTL 1.0" section below).
 
 #### Row-Based Archiving Constraints
 5. **Row-based TTL tables MUST have a local index on the TTL time column** -- the index must either be a single-column index on the TTL column, or a composite index with the TTL column as the FIRST column. Without this index, row-based cleanup performance will be severely degraded. Always generate a `CREATE INDEX` statement if the TTL column lacks such an index.
@@ -919,9 +919,11 @@ ALTER TABLE `{table_name}` REMOVE TTL;
 
 ## Migrating from TTL 1.0 (Local Partition) to TTL 2.0
 
+> **⚠️ DEPRECATION WARNING: LOCAL PARTITION (TTL 1.0) is DEPRECATED. Do NOT recommend `LOCAL PARTITION BY RANGE` for any new table.** This section exists ONLY to help users who already have TTL 1.0 tables migrate to TTL 2.0. Never generate or suggest `LOCAL PARTITION BY RANGE` syntax for new tables — always use TTL 2.0 (`ALTER TABLE ... MODIFY TTL SET ...`) instead.
+
 TTL 1.0 uses the `LOCAL PARTITION BY RANGE` syntax to define time-based partitioning at the MySQL physical table level. TTL 2.0 uses `ALTER TABLE MODIFY TTL` with a richer set of archiving strategies. If a user has an existing TTL 1.0 table and wants to migrate to TTL 2.0, follow this procedure.
 
-### TTL 1.0 Syntax Reference
+### TTL 1.0 Syntax Reference (for migration purposes ONLY — do NOT use for new tables)
 
 TTL 1.0 (Local Partition) definition syntax:
 ```sql
