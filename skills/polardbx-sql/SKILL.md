@@ -32,6 +32,8 @@ SHOW CREATE DATABASE db_name;
 
 ## Core Workflow (Follow each time)
 
+**⚠️ CRITICAL: If the user's question involves TTL, data expiration, cold data archiving, or auto-add partitions, you MUST read `references/ttl20-user-guide.md` in full BEFORE generating any SQL. Answering from memory WILL produce incorrect syntax that does not exist in PolarDB-X.**
+
 1. Confirm the target engine and version:
    - Run `SELECT VERSION();` to determine the instance type:
      - Result contains `TDDL` with version > 5.4.12 (e.g., `5.7.25-TDDL-5.4.19-20251031`) -> **2.0 Enterprise Edition (Distributed Edition)**, this skill applies. Parse the Enterprise Edition version number (e.g., 5.4.19).
@@ -120,6 +122,8 @@ SHOW CREATE DATABASE db_name;
     - ❌ `ALTER TABLE t TTL = ...` — wrong, use `ALTER TABLE t MODIFY TTL SET ...`
     - ❌ `LOCAL PARTITION BY RANGE ...` — **DEPRECATED (TTL 1.0)**, never recommend this for new tables. If a user has an existing `LOCAL PARTITION` table, guide them to migrate to TTL 2.0 (see below).
     - ❌ `TTL_CONDITION = '...'`, `TTL_JOB_INTERVAL = '...'`, or any other non-standard TTL parameter — these do NOT exist in PolarDB-X. Only use the exact parameters listed in the reference guide: TTL_ENABLE, TTL_CLEANUP, TTL_EXPR, TTL_JOB, TTL_PART_INTERVAL, ARCHIVE_TYPE, ARCHIVE_TABLE_PRE_ALLOCATE, ARCHIVE_TABLE_POST_ALLOCATE.
+    - ❌ `TTL BY col INTERVAL ...` — does NOT exist. The only valid inline TTL syntax inside CREATE TABLE is `TTL = TTL_DEFINITION(...)`.
+    - ❌ `TTL_ARCHIVE = true`, `TTL_ARCHIVE_TABLE = ...`, `TTL_ARCHIVE_STORAGE_POLICY = ...`, `TTL_DELETE_BATCH_SIZE = ...` — these do NOT exist in PolarDB-X. Archiving is controlled solely by `ARCHIVE_TYPE` and the separate `CREATE TABLE ... LIKE ... ENGINE = 'Columnar' ARCHIVE_MODE = 'TTL'` statement.
   - **Version requirements**: Row-based archiving >= `polardb-2.4.0_5.4.19-20240927`; Partition-based archiving >= `polardb-2.5.0_5.4.20-20250328`. Check with `SELECT VERSION();` before recommending partition-based TTL.
   - **LOCAL PARTITION (TTL 1.0) is DEPRECATED**: Never recommend `LOCAL PARTITION BY RANGE` for any new table. It is the legacy TTL 1.0 mechanism and is mutually exclusive with TTL 2.0. If a user has an existing `LOCAL PARTITION` table, guide them to migrate to TTL 2.0 via `ALTER TABLE t REMOVE LOCAL PARTITIONING` then apply TTL 2.0 definition. See migration workflow in [references/ttl20-user-guide.md](references/ttl20-user-guide.md).
   - **CREATE TABLE inline TTL**: PolarDB-X supports embedding TTL in CREATE TABLE via `TTL = TTL_DEFINITION(...)` syntax. `ARCHIVE_TABLE_NAME` must be empty — the archive table must be created separately. Example:
@@ -135,7 +139,7 @@ SHOW CREATE DATABASE db_name;
     )
     PARTITION BY KEY(`id`) PARTITIONS 16;
     ```
-  - **Key constraints**: (1) Broadcast tables do NOT support TTL — **do NOT recommend converting a broadcast table to another table type (e.g., SINGLE) solely for the purpose of enabling TTL**; (2) Single tables only support ARCHIVE_TYPE='ROW'; (3) Row-based requires local index on TTL column; (4) Partition-based requires Range partition on TTL column and NO MAXVALUE partition; (5) Partition-based does NOT support GSI; (6) TTL_CLEANUP must stay 'OFF' until archive table creation completes.
+  - **Key constraints**: (1) Broadcast tables do NOT support TTL — **do NOT recommend converting a broadcast table to ANY other table type (SINGLE, partitioned, or otherwise) solely for the purpose of enabling TTL**; (2) **SINGLE tables DO support TTL** using `ARCHIVE_TYPE = 'ROW'` — do NOT tell users TTL requires partitioned tables; (3) Row-based requires local index on TTL column; (4) Partition-based requires Range partition on TTL column and NO MAXVALUE partition; (5) Partition-based does NOT support GSI; (6) TTL_CLEANUP must stay 'OFF' until archive table creation completes.
   - **TTL management operations**: View definition: `SELECT * FROM INFORMATION_SCHEMA.TTL_INFO WHERE TABLE_SCHEMA='db' AND TABLE_NAME='t';`. Manually trigger: `ALTER TABLE t CLEANUP EXPIRED DATA ASYNC=TRUE;`. Remove TTL: must drop archive table first, then `ALTER TABLE t REMOVE TTL;`. For all management commands, read [references/ttl20-user-guide.md](references/ttl20-user-guide.md).
   - For complete workflow and all examples, read [references/ttl20-user-guide.md](references/ttl20-user-guide.md).
 - **Unsupported MySQL features**: Stored procedures/triggers/EVENTs/SPATIAL/GEOMETRY/LOAD XML/HANDLER, etc.

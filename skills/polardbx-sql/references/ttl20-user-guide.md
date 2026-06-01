@@ -738,7 +738,7 @@ TTL_CLEANUP = 'ON';
 
 #### Table Type Constraints
 1. **Broadcast tables in AUTO mode do NOT support TTL definitions** -- TTL cannot be applied to broadcast tables at all. **Do NOT recommend converting a broadcast table to another table type (e.g., SINGLE) solely for the purpose of enabling TTL.**
-2. **Single tables in AUTO mode only support row-based archiving** (ARCHIVE_TYPE = 'ROW') -- partition-based archiving is not available for single tables.
+2. **Single tables in AUTO mode DO support TTL** using row-based archiving (`ARCHIVE_TYPE = 'ROW'`) — partition-based archiving is not available for single tables, but row-based TTL works fine. **Do NOT tell users that TTL requires partitioned tables.**
 3. **DRDS mode tables do NOT support TTL 2.0** -- only AUTO mode database tables are supported.
 4. **Tables using Local Partition (TTL 1.0) cannot use TTL 2.0** -- they are mutually exclusive. **LOCAL PARTITION (TTL 1.0) is DEPRECATED — do NOT recommend it for new tables.** If a user has an existing LOCAL PARTITION table, guide them to migrate to TTL 2.0 (see the "Migrating from TTL 1.0" section below).
 
