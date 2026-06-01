@@ -739,7 +739,7 @@ TTL_CLEANUP = 'ON';
 #### Table Type Constraints
 1. **Broadcast tables in AUTO mode do NOT support TTL definitions** -- TTL cannot be applied to broadcast tables at all.
 2. **Single tables in AUTO mode only support row-based archiving** (ARCHIVE_TYPE = 'ROW') -- partition-based archiving is not available for single tables.
-3. **DRDS mode tables do NOT support TTL** -- only AUTO mode database tables are supported.
+3. **DRDS mode tables do NOT support TTL 2.0** -- only AUTO mode database tables are supported.
 4. **Tables using Local Partition (TTL 1.0) cannot use TTL 2.0** -- they are mutually exclusive. **LOCAL PARTITION (TTL 1.0) is DEPRECATED — do NOT recommend it for new tables.** If a user has an existing LOCAL PARTITION table, guide them to migrate to TTL 2.0 (see the "Migrating from TTL 1.0" section below).
 
 #### Row-Based Archiving Constraints
@@ -748,13 +748,13 @@ TTL_CLEANUP = 'ON';
 
 #### Partition-Based Archiving Constraints
 7. **Partition-based archiving does NOT support GSI/UGSI** -- if the table has any global secondary indexes, partition-based archiving cannot be used. Must use row-based archiving instead.
-8. **Partition-based TTL tables MUST NOT have a MAXVALUE partition** -- the Range partition definition of the TTL table cannot contain a `VALUES LESS THAN (MAXVALUE)` partition. If the existing table has a MAXVALUE partition, it must be removed (e.g., via split or reorganize) before enabling partition-based archiving. The TTL mechanism needs to add new Range partitions beyond the current maximum bound, which is impossible if MAXVALUE already exists.
+8. **For partition-based archiving, the Range partition MUST NOT contain a MAXVALUE partition** -- the Range partition definition cannot contain a `VALUES LESS THAN (MAXVALUE)` partition. If the existing table has a MAXVALUE partition, it must be removed (e.g., via split or reorganize) before enabling partition-based archiving. The TTL mechanism needs to add new Range partitions beyond the current maximum bound, which is impossible if MAXVALUE already exists.
 9. **Partition-based archiving requires the TTL column to be the Range partition column** -- if the table's Range partition (first-level or second-level subpartition) is not on the TTL column, partition-based archiving cannot be used.
 
 #### Archive Table Constraints
 10. **One TTL table can only have one archive table** -- one-to-one binding relationship.
 11. **If an archive table exists, the TTL definition cannot be removed directly** -- must drop the archive table first using `/*+TDDL:CMD_EXTRA(TTL_FORBID_DROP_TTL_TBL_WITH_ARC_CCI=false)*/ DROP TABLE {archive_table}`.
-12. **TTL_CLEANUP should remain 'OFF' until archive table creation completes** -- to avoid data loss before archiving finishes.
+12. **TTL_CLEANUP should remain 'OFF' until archive table creation completes** -- to avoid permanent deletion of data that should have been archived.
 
 #### General Constraints
 13. **Adding TTL definition is metadata-only** -- no data changes, no impact on online reads/writes.
@@ -765,7 +765,7 @@ TTL_CLEANUP = 'ON';
 ### Naming Conventions
 
 - Archive table name: `{original_table_name}_arc` (recommended convention)
-- The archive table is actually a view pointing to the archive CCI (Clustered Columnar Index)
+- Internally, the archive table is currently implemented as a view pointing to the archive CCI (Clustered Columnar Index)
 
 ### Querying Archive Data
 
@@ -789,7 +789,7 @@ TTL_FILTER = COND_EXPR(`status` = 1);
 
 This ensures only expired data with `status = 1` gets cleaned. The filter is ANDed with the time condition.
 
-**WARNING: TTL_FILTER is ONLY valid for ARCHIVE_TYPE = 'ROW'. Never include TTL_FILTER when ARCHIVE_TYPE is 'PARTITION' or 'SUBPARTITION' -- it will be ignored or cause errors.**
+**WARNING: TTL_FILTER is ONLY valid for ARCHIVE_TYPE = 'ROW'. Never include TTL_FILTER for partition-based archiving -- partition-level cleanup operates by dropping entire partitions and cannot apply row-level filter conditions.**
 
 ### Management Operations
 
@@ -900,7 +900,7 @@ MODIFY TTL SET
 ALTER TABLE {table_name} CLEANUP EXPIRED DATA WITH TTL_CLEANUP = 'OFF';
 ```
 
-For the complete auto-add-range-parts reference including all partition types (first-level Range, second-level Range subpartition, by-day, by-month), see: `skills/polardbx-sql/references/auto-add-range-parts.md`
+For the complete auto-add-range-parts reference including all partition types (first-level Range, second-level Range subpartition, by-day, by-month), see: [auto-add-range-parts.md](auto-add-range-parts.md)
 
 ## Removing TTL Definition
 
@@ -957,7 +957,7 @@ Extract the following from the existing TTL 1.0 definition:
 |-------------------|-------------------|
 | `RANGE (col)` | `TTL_EXPR = \`col\` EXPIRE AFTER N UNIT TIMEZONE '+08:00'` |
 | `INTERVAL 1 MONTH` | `TTL_PART_INTERVAL = INTERVAL(1, MONTH)` |
-| `INTERVAL 6 MONTH` | `TTL_PART_INTERVAL = INTERVAL(6, MONTH)` (or `INTERVAL(1, MONTH)` for finer granularity) |
+| `INTERVAL 6 MONTH` | `TTL_PART_INTERVAL = INTERVAL(6, MONTH)` (or choose `INTERVAL(1, MONTH)` following the retention-based recommendations in the Determine TTL_PART_INTERVAL section) |
 | `EXPIRE AFTER 12` (with INTERVAL 1 MONTH) | `EXPIRE AFTER 12 MONTH` (retention = 12 * 1 month) |
 | `EXPIRE AFTER 4` (with INTERVAL 6 MONTH) | `EXPIRE AFTER 24 MONTH` (retention = 4 * 6 months) |
 | `PRE ALLOCATE 6` | `ARCHIVE_TABLE_PRE_ALLOCATE = 6` |
@@ -1050,6 +1050,7 @@ PRE ALLOCATE 6;
 ALTER TABLE `t_order` REMOVE LOCAL PARTITIONING;
 
 -- Step 2: (Optional) Remove TTL column from primary key
+-- ONLY execute this step if you explicitly confirmed removing the TTL column from the primary key.
 -- Original PK: PRIMARY KEY (id, gmt_modified)
 -- New PK: PRIMARY KEY (id)
 -- NOTE: Evaluate impact before executing on large tables
