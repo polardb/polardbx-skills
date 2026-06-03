@@ -1,11 +1,11 @@
 ---
 name: polardbx-sql
 description: |
-  Design partition schemes, select partition keys, create GSI, and write SQL for PolarDB-X 2.0 Enterprise Edition AUTO mode databases, handling PolarDB-X vs MySQL differences (partitioned tables, GSI, CCI, Sequence, table groups, pagination, etc.).
-  Use when designing partition schemes, selecting partition keys, converting single tables to partitioned tables, creating GSI/CCI indexes, writing or migrating SQL for PolarDB-X, or diagnosing slow queries on PolarDB-X.
-  Triggers: "PolarDB-X SQL", "PolarDB-X create table", "partitioned table", "partition design", "partition scheme", "partition key", "GSI", "CCI", "Sequence", "MySQL migrate to PolarDB-X", "PolarDB-X compatibility", "single table to partitioned table", "convert to partitioned table", "large table", "table sharding", "distributed table", "AUTO mode", "pagination query", "Keyset pagination", "Range partition", "PolarDB-X slow query", "full-shard scan"
+  Design partition schemes, select partition keys, create GSI, and write SQL for PolarDB-X 2.0 Enterprise Edition AUTO mode databases, handling PolarDB-X vs MySQL differences (partitioned tables, GSI, Sequence, table groups, distributed transactions, etc.).
+  Use when designing partition schemes, selecting partition keys, converting single tables to partitioned tables, creating GSI indexes, writing or migrating SQL for PolarDB-X, or diagnosing slow queries on PolarDB-X.
+  Triggers: "PolarDB-X SQL", "PolarDB-X create table", "partitioned table", "partition design", "partition scheme", "partition key", "GSI", "Sequence", "MySQL migrate to PolarDB-X", "PolarDB-X compatibility", "single table to partitioned table", "convert to partitioned table", "large table", "table sharding", "distributed table", "AUTO mode", "Range partition", "PolarDB-X slow query", "full-shard scan"
 metadata:
-  version: 0.3.2
+  version: 0.4.0
 ---
 
 # PolarDB-X SQL (MySQL Compatibility Focus)
@@ -32,7 +32,11 @@ SHOW CREATE DATABASE db_name;
 
 ## Core Workflow (Follow each time)
 
-**⚠️ CRITICAL: If the user's question involves TTL, data expiration, cold data archiving, or auto-add partitions, switch to the `polardbx-ttl20` or `polardbx-auto-add-range-parts` skill immediately — do NOT handle TTL questions in this skill.**
+**⚠️ CRITICAL: If the user's question involves any of the following, switch to the dedicated skill immediately — do NOT handle these in this skill:**
+- **TTL / data expiration / cold data archiving / auto-add partitions** → switch to `polardbx-ttl20` skill
+- **Online DDL / lock-free DDL / DDL safety / OMC / MDL lock** → switch to `polardbx-online-ddl` skill
+- **Pagination / deep paging / large table traversal / LIMIT optimization** → switch to `polardbx-pagination` skill
+- **CCI / columnar index / OLAP analytics / HTAP** → switch to `polardbx-cci` skill
 
 1. Confirm the target engine and version:
    - Run `SELECT VERSION();` to determine the instance type:
@@ -88,7 +92,7 @@ SHOW CREATE DATABASE db_name;
   GLOBAL INDEX gsi_seller(seller_id)
   ```
   **Classic partition design — order table**: Candidates are order_id (PK) and buyer_id. Comprehensive analysis: order_id has the highest cardinality (unique per row), zero hotspot risk, PK status, and semantically high query frequency (order detail/status/payment lookups); buyer_id has high buyer-dimension query ratio but potential distribution skew (some buyers generate far more orders). Conclusion: order_id as partition key + Clustered GSI on buyer_id.
-- **Clustered Columnar Index CCI**: Row-column hybrid storage, accelerates OLAP analytical queries via `CLUSTERED COLUMNAR INDEX`.
+- **Clustered Columnar Index CCI**: Row-column hybrid storage, accelerates OLAP analytical queries. **All CCI questions (creation, query optimization, CCI vs GSI) must be handled by the `polardbx-cci` skill.**
 - **Sequence**: Globally unique sequence, default type is `NEW SEQUENCE` (5.4.14+), distributed alternative to AUTO_INCREMENT.
 - **Distributed transactions**: Based on TSO global clock + MVCC + 2PC, strong consistency by default; single-shard transactions automatically optimized to local transactions.
 - **Table groups**: Tables with the same partition rules bound to the same table group, ensuring JOIN computation pushdown to avoid cross-shard data shuffling.
@@ -111,9 +115,9 @@ SHOW CREATE DATABASE db_name;
 9. **Avoid unsupported MySQL syntax**: Don't use stored procedures, triggers, EVENTs, SPATIAL, NATURAL JOIN, `:=`, etc.
 10. **Avoid subqueries in HAVING/JOIN ON**: Rewrite as JOINs or CTEs.
 11. **Use EXPLAIN commands for diagnosis**: For SQL performance issues, prefer `EXPLAIN SHARDING` and `EXPLAIN ANALYZE`.
-12. **Check long transactions before Online DDL**: Check for long transactions before executing DDL to avoid MDL lock waits.
+12. **Check long transactions before Online DDL**: Use the `polardbx-online-ddl` skill for all DDL safety assessment, lock-free execution, and long transaction checks.
 13. **Use TTL tables to manage cold data**: For large tables with time attributes, use TTL tables to automatically clean up expired data. Use the `polardbx-ttl20` skill for all TTL questions (archiving, expiration, auto-add partitions).
-14. **Use Keyset pagination for efficient paging**: Avoid `LIMIT M, N` deep pagination (cost O(M+N), even larger in distributed systems); record the sort value of the last row in each batch as the WHERE condition for the next batch; when sort columns may have duplicates, use `(sort_column, id)` tuple comparison; ensure appropriate composite indexes on sort columns.
+14. **Use Keyset pagination for efficient paging**: Use the `polardbx-pagination` skill for all pagination optimization, Keyset pagination, large table traversal, and data export batch queries.
 15. **Use auto-add partitions for Range partitioned tables**: Leverage the TTL mechanism to automatically pre-create future partitions for time-type Range partitioned tables, preventing write failures due to insufficient partitions. Use the `polardbx-ttl20` skill for the full configuration guide.
 
 ## Reference Links
@@ -124,11 +128,11 @@ SHOW CREATE DATABASE db_name;
 | [references/partition-design-best-practice.md](references/partition-design-best-practice.md) | Partition design best practices: partition key/GSI/algorithm/count selection, three-step migration, complete examples |
 | [references/primary-key-unique-key.md](references/primary-key-unique-key.md) | Primary key and unique key Global/Local classification, rules, risks, and recommendations |
 | [references/gsi.md](references/gsi.md) | Global Secondary Index GSI/UGSI/Clustered GSI creation, querying, and limitations |
-| [references/cci.md](references/cci.md) | Clustered Columnar Index CCI creation, usage, and applicable scenarios |
 | [references/sequence.md](references/sequence.md) | Sequence types (NEW/GROUP/SIMPLE/TIME), creation and usage |
 | [references/transactions.md](references/transactions.md) | Distributed transaction model, isolation levels, and considerations |
 | [references/mysql-compatibility-notes.md](references/mysql-compatibility-notes.md) | MySQL vs PolarDB-X compatibility differences and development limitations |
 | [references/explain.md](references/explain.md) | EXPLAIN command variants and execution plan diagnostics |
-| [references/online-ddl.md](references/online-ddl.md) | Online DDL assessment, lock-free execution strategy, long transaction checks, DMS lock-free changes |
-| [references/pagination-best-practice.md](references/pagination-best-practice.md) | Efficient pagination: Keyset pagination, per-shard traversal, index requirements, Java examples |
-| `polardbx-ttl20` skill | TTL 2.0 cold data archiving, data expiration, and auto-add Range partitions — use this skill for all TTL questions |
+| `polardbx-online-ddl` skill | Online DDL safety assessment, lock-free execution (OMC), long transaction checks — use for all DDL safety questions |
+| `polardbx-pagination` skill | Efficient pagination: Keyset pagination, per-shard traversal, index requirements, Java examples — use for all pagination questions |
+| `polardbx-cci` skill | Clustered Columnar Index (CCI) creation, OLAP/HTAP analytics, CCI vs GSI — use for all CCI/columnar questions |
+| `polardbx-ttl20` skill | TTL 2.0 cold data archiving, data expiration, and auto-add Range partitions — use for all TTL questions |

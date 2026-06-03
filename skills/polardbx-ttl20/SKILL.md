@@ -95,8 +95,8 @@ ENGINE = 'Columnar' ARCHIVE_MODE = 'TTL';
 
 ## Version Requirements
 
-- Row-based archiving: >= `polardb-2.4.0_5.4.19-20240927`
-- Partition-based archiving: >= `polardb-2.5.0_5.4.20-20250328`
+- Row-based archiving: instance version >= `5.4.19-20240927`
+- Partition-based archiving: instance version >= `5.4.20-20250328`
 
 ## Full Reference
 
