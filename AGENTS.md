@@ -33,3 +33,9 @@ Key principle: **SKILL.md must contain enough inline knowledge for the agent to 
 
 - Every `SKILL.md` has a `metadata.version` field in YAML frontmatter (semver).
 - Bump the version once per commit, not per edit. Patch for fixes, minor for new content or restructuring.
+
+## README Maintenance
+
+- When adding, removing, or renaming a skill, update `README.md` accordingly:
+  - Update the directory tree in the "目录结构" section.
+  - Update the skill list in the "当前 Skills" section (one-line description per skill).
