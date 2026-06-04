@@ -1,10 +1,10 @@
 ---
 name: polardbx-standard
 description: |
-  Provide operational guidance, unique features, and best practices for PolarDB-X 2.0 Standard Edition (X-Cluster based). Standard Edition is 100% MySQL compatible at the SQL layer; this skill focuses on HA architecture, Lizard transaction system, Panda Index, and operational management.
-  Triggers: "PolarDB-X standard", "PolarDB-X 标准版", "X-Cluster", "X-Paxos", "Panda Index", "Lizard", "SCN", "标准版运维", "standard edition", "高可用", "HA failover", "Lizard事务"
+  Provide operational guidance, unique features, and best practices for PolarDB-X 2.0 Standard Edition (X-Cluster based). Standard Edition is 100% MySQL compatible at the SQL layer; this skill focuses on HA architecture, Lizard transaction system, Panda Index, native vector index (HNSW) for semantic search, and operational management.
+  Triggers: "PolarDB-X standard", "PolarDB-X 标准版", "X-Cluster", "X-Paxos", "Panda Index", "Lizard", "SCN", "标准版运维", "standard edition", "高可用", "HA failover", "Lizard事务", "vector index", "VECTOR", "VEC_DISTANCE", "HNSW", "向量索引", "向量检索", "语义搜索", "embedding", "RAG"
 metadata:
-  version: 0.2.1
+  version: 0.3.0
 ---
 
 # PolarDB-X Standard Edition (X-Cluster)
@@ -81,6 +81,82 @@ SET opt_index_format_panda_enabled = ON;
 - Only optimizes RC isolation; RR still uses Next-Key locks.
 - Existing indexes need manual rebuild (see [panda-index.md](references/panda-index.md)).
 
+### Vector Index (HNSW)
+
+Native vector storage and ANN similarity search inside MySQL. `VECTOR(N)` data type (up to 16,383 dimensions) + HNSW vector index, accessed via standard SQL `ORDER BY VEC_DISTANCE(...) LIMIT N`. Use cases: semantic search, RAG, recommendation recall, image / multimodal retrieval.
+
+- **Storage node version**: X-Cluster build `8.4.21-20260423` / `V2.6.0.8.4.21-20260423` or later. Verify with `SELECT VERSION();` containing `X-Cluster` and a version date >= `20260423`, and `SHOW GLOBAL VARIABLES LIKE 'vidx_disabled';` returning a row. Monitoring metric names may vary by maintenance version.
+- **Master switch**: `vidx_disabled = OFF` (inverted switch — `ON` means feature disabled). **Reconnect after change.**
+- **Isolation level**: works under any of RC / RR / SERIALIZABLE (not RC-only).
+- Both Standard Edition and Enterprise Edition are supported. PolarDB-X Zero instances ship with the feature enabled.
+
+Core SQL pattern:
+
+```sql
+-- 1. Enable feature (skip on PolarDB-X Zero — already enabled)
+SET GLOBAL vidx_disabled = OFF;  -- reconnect afterwards
+
+-- 2. Create table with VECTOR column and HNSW index
+CREATE TABLE products (
+    id        INT PRIMARY KEY AUTO_INCREMENT,
+    name      VARCHAR(100),
+    embedding VECTOR(128),
+    VECTOR INDEX vi (embedding) M=6 DISTANCE=COSINE
+) ENGINE=InnoDB;
+
+-- 3. Write vector data via VEC_FROMTEXT
+INSERT INTO products VALUES (NULL, 'Bluetooth headphones',
+  VEC_FROMTEXT('[0.1, 0.2, ...]'));
+
+-- 4. Semantic search — must be ORDER BY VEC_DISTANCE() LIMIT N
+SELECT id, name,
+       VEC_DISTANCE(embedding, VEC_FROMTEXT('[...]')) AS distance
+FROM products
+ORDER BY distance
+LIMIT 10;
+
+-- 5. Verify index is used (key column should show vi)
+EXPLAIN SELECT ... ORDER BY VEC_DISTANCE(...) LIMIT 10;
+```
+
+**Key constraints** (the most-violated rules):
+
+- **InnoDB only**, **one vector index per table**, **NOT supported on partitioned tables**.
+- **COPY DDL** for create / drop / modify (long-running on big tables — schedule off-peak).
+- VECTOR columns can NOT be primary key, foreign key, unique key, or partition key. NaN / Inf rejected; NULL stored but not indexed.
+- Index does NOT show up in `SHOW INDEX FROM t` — use `SHOW CREATE TABLE` instead.
+- Vector index can NOT be set to INVISIBLE.
+
+**Optimizer rules** (the index is picked only if ALL hold):
+
+- Query has `ORDER BY VEC_DISTANCE(col, ...) LIMIT N` — both clauses are mandatory.
+- Sort direction is `ASC`.
+- DISTANCE type in `VEC_DISTANCE_*` matches the index's DISTANCE — must be identical.
+- `LIMIT N <= table_rows / 4` — otherwise falls back to full scan; use `FORCE INDEX(vi)` to force.
+- No `GROUP BY`. Aggregate via subquery wrapping the ANN search.
+
+**Diagnosis quick checklist** (5 steps when something looks off):
+
+1. **Version**: `SELECT VERSION();` should contain `X-Cluster` with version date >= `20260423`, and `SHOW GLOBAL VARIABLES LIKE 'vidx_disabled';` should return a row.
+2. **Switch**: `SHOW GLOBAL VARIABLES LIKE 'vidx_disabled';` must be `OFF` AND session must be reconnected after the change.
+3. **EXPLAIN**: `key` column shows the vector index name. If not — check optimizer rules above; most often it's missing LIMIT, mismatched DISTANCE, or LIMIT > rows/4.
+4. **Status**: `SHOW GLOBAL STATUS LIKE 'Vidx%';` — `Vidx_query_count` increments after each ANN query; cache hit rate `total_hits / (total_hits + total_misses)` (using the `Vidx_*_cache_*` metrics available on your engine version) should be > 90%.
+5. **Brute-force baseline**: `FORCE INDEX(PRIMARY) ORDER BY VEC_DISTANCE(...) LIMIT N` gives 100%-recall ground truth — compare against ANN to quantify recall.
+
+**Tuning quick reference**:
+
+| Symptom | Lever | Direction |
+|---------|-------|-----------|
+| Recall low | `vidx_hnsw_ef_search` (SESSION) | 20 → 50 → 100; must be ≥ LIMIT |
+| Recall low (permanent) | `M` at index creation | 6 → 16 → 32; rebuild required |
+| Cache hit rate < 90% | `vidx_hnsw_cache_size` (GLOBAL) | Estimate: `rows × (dim×2 + M×16 + 60)` bytes; e.g. 1M×128×M=6 ≈ 700MB |
+| Space inflation / recall degrades over time | `OPTIMIZE TABLE t` | Periodic rebuild |
+| Slow writes | Use multi-row INSERT, evaluate M | Avoid extreme M on write-heavy tables |
+| NLP / text embeddings | DISTANCE | Use COSINE |
+| Image features / spatial coordinates | DISTANCE | Use EUCLIDEAN |
+
+For full reference (system variables, monitoring, replication, FAQ) see [vector-index.md](references/vector-index.md). For end-to-end verification, run [test-vector-index.md](playbooks/test-vector-index.md).
+
 ### 100% MySQL Compatible
 
 Full support for stored procedures, triggers, EVENTs, etc. Use standard MySQL syntax for all SQL tasks.
@@ -92,6 +168,7 @@ Full support for stored procedures, triggers, EVENTs, etc. Use standard MySQL sy
 | [references/x-paxos-ha.md](references/x-paxos-ha.md) | X-Paxos HA: architecture, log fusion, automatic failover, cluster monitoring SQL |
 | [references/lizard-transaction.md](references/lizard-transaction.md) | Lizard transaction system: SCN-based MVCC, Cleanout optimization, performance benchmark |
 | [references/panda-index.md](references/panda-index.md) | Panda Index: deadlock-free unique key, enable/disable, upgrade existing indexes, FAQ |
+| [references/vector-index.md](references/vector-index.md) | Vector Index: VECTOR(N) type, HNSW index syntax, distance functions, ef_search tuning, monitoring, troubleshooting, performance tuning, replication |
 
 ## Playbooks
 
@@ -100,3 +177,4 @@ Executable end-to-end verification steps. Agent should auto-execute all steps wh
 | Playbook | Description |
 |----------|-------------|
 | [playbooks/test-panda-index.md](playbooks/test-panda-index.md) | Verify Panda Index eliminates Gap locks: baseline with regular unique key, then verify with Panda Index |
+| [playbooks/test-vector-index.md](playbooks/test-vector-index.md) | Verify vector index end-to-end: create VECTOR(5) products table, build HNSW index, semantic search top-3, validate recall vs full-scan ground truth |
