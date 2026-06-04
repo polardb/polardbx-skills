@@ -69,11 +69,7 @@ SHOW CREATE DATABASE db_name;
 5. If the user provides MySQL SQL, perform compatibility checks:
    - Replace unsupported features and provide PolarDB-X alternatives.
    - Clearly mark behavioral differences and version requirements.
-6. When SQL is slow or errors occur, use PolarDB-X diagnostic tools:
-   - `EXPLAIN` to view the logical execution plan.
-   - `EXPLAIN EXECUTE` to view the physical execution plan pushed down to DN.
-   - `EXPLAIN SHARDING` to view shard scan details and check for full-shard scans.
-   - `EXPLAIN ANALYZE` to actually execute and collect runtime statistics.
+6. When SQL is slow or errors occur, use the `polardbx-plan-analysis` skill for execution plan analysis and diagnostics (EXPLAIN / EXPLAIN EXECUTE / EXPLAIN SHARDING / EXPLAIN ANALYZE).
 7. When the user needs TTL (data expiration, cold data archiving, or auto-add partitions):
    - **Use the `polardbx-ttl20` skill** for all TTL-related questions: cold data archiving, data expiration, and auto-add Range partitions.
    - Do NOT handle TTL questions in this skill — TTL syntax is unique to PolarDB-X and must be handled by the dedicated `polardbx-ttl20` skill.
@@ -131,7 +127,7 @@ SHOW CREATE DATABASE db_name;
 | [references/sequence.md](references/sequence.md) | Sequence types (NEW/GROUP/SIMPLE/TIME), creation and usage |
 | [references/transactions.md](references/transactions.md) | Distributed transaction model, isolation levels, and considerations |
 | [references/mysql-compatibility-notes.md](references/mysql-compatibility-notes.md) | MySQL vs PolarDB-X compatibility differences and development limitations |
-| [references/explain.md](references/explain.md) | EXPLAIN command variants and execution plan diagnostics |
+| `polardbx-plan-analysis` skill | Execution plan analysis and diagnostics (EXPLAIN variants, operator taxonomy, cost analysis) — use for all plan analysis questions |
 | `polardbx-online-ddl` skill | Online DDL safety assessment, lock-free execution (OMC), long transaction checks — use for all DDL safety questions |
 | `polardbx-pagination` skill | Efficient pagination: Keyset pagination, per-shard traversal, index requirements, Java examples — use for all pagination questions |
 | `polardbx-cci` skill | Clustered Columnar Index (CCI) creation, OLAP/HTAP analytics, CCI vs GSI — use for all CCI/columnar questions |
