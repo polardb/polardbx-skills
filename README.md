@@ -47,7 +47,7 @@ skills/
 - **polardbx-sql** - PolarDB-X 企业版 SQL 编写与 MySQL 兼容性处理（分区设计、GSI、Sequence、分布式事务、EXPLAIN 诊断等）。
 - **polardbx-online-ddl** - PolarDB-X 企业版 Online DDL 安全变更。通过 EXPLAIN ONLINE_DDL 评估锁表风险，支持 OMC 无锁列类型变更、长事务检查、DDL 进度监控。
 - **polardbx-pagination** - PolarDB-X 企业版高效分页与大表遍历。推荐 Keyset 分页替代 LIMIT M,N 深翻页，覆盖按分片遍历、索引要求、Java 代码示例。
-- **polardbx-cci** - PolarDB-X 企业版 CCI 列存索引（OLAP/HTAP）。创建和使用 Clustered Columnar Index 加速分析查询，涵盖 CCI 分区键选择、CCI vs GSI 对比、CCI + TTL 冷热分离。
+- **polardbx-cci** - PolarDB-X 企业版 CCI 列存索引（OLAP/HTAP）。创建和使用 Clustered Columnar Index 加速分析查询，涵盖完整创建语法（排序键、分区键、COLUMNAR_OPTIONS）、分区/排序键选择指南、SHOW/CHECK 管理命令、列存快照（AS OF TSO 查询与恢复）、参数调优、行列路由、DDL 限制、CCI vs GSI 对比、CCI + TTL 冷热分离。
 - **polardbx-ttl20** - PolarDB-X 企业版 TTL 2.0 冷数据归档与自动加 Range 分区。分析表结构推荐归档策略（行级或分区级），生成生产可用的 TTL SQL；也支持仅自动预建分区（无清理）的场景。
 - **polardbx-plan-analysis** - PolarDB-X 执行计划分析与 SQL 等价性验证。解读 EXPLAIN / EXPLAIN COST / EXPLAIN ANALYZE 输出，涵盖 17 类算子解读、代价分析、运行时瓶颈定位、SQL 与计划等价性 14 维度检查、可选 Graphviz 计划可视化。
 - **polardbx-standard** - PolarDB-X 标准版独有特性、高可用架构、运维操作和性能最佳实践，涵盖 X-Paxos HA、Lizard 事务、Panda Index、向量索引（VECTOR + HNSW 语义搜索）。

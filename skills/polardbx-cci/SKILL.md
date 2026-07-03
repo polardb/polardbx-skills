@@ -1,153 +1,184 @@
 ---
 name: polardbx-cci
 description: |
-  Create and use Clustered Columnar Index (CCI) for OLAP/HTAP analytical queries on PolarDB-X 2.0 Enterprise Edition. Covers CCI creation syntax, partition key selection for analytics, query optimization with CCI, CCI vs Clustered GSI differences, CCI + TTL hot/cold data separation, and when NOT to use CCI.
-  Use when the user needs analytical queries (aggregation, wide table scans, reports) on PolarDB-X, wants to enable HTAP on existing OLTP tables, or asks about columnar storage.
-  Triggers: "CCI", "列存索引", "columnar index", "OLAP", "分析查询", "HTAP", "实时分析", "宽表聚合", "CLUSTERED COLUMNAR", "行列混存", "analytical query", "columnar storage", "report query", "data analysis acceleration"
+  Create and use Clustered Columnar Index (CCI) for OLAP/HTAP analytical queries on PolarDB-X 2.0 Enterprise Edition. Covers CCI creation syntax, partition/sort key selection, query optimization, snapshots (AS OF TSO), SHOW/CHECK commands, DDL limitations, CCI vs GSI.
+  Use when the user needs analytical queries (aggregation, wide table scans, reports) on PolarDB-X, wants to enable HTAP, or asks about columnar storage.
+  Triggers: "CCI", "列存索引", "columnar index", "OLAP", "分析查询", "HTAP", "宽表聚合", "CLUSTERED COLUMNAR", "行列混存", "列存快照", "AS OF TSO", "SHOW COLUMNAR", "排序键", "sort key"
 metadata:
-  version: 0.1.0
+  version: 0.3.1
 ---
 
 # PolarDB-X CCI — Clustered Columnar Index for OLAP/HTAP
 
-Create and use Clustered Columnar Index (CCI) to accelerate OLAP analytical queries on PolarDB-X 2.0 Enterprise Edition (AUTO mode). CCI provides row-column hybrid storage (HTAP) — OLTP queries use row-store partitioned tables while OLAP queries leverage columnar storage.
+CCI accelerates OLAP analytical queries on PolarDB-X Enterprise Edition (AUTO mode) via columnar storage on OSS. OLTP uses row-store; OLAP uses CCI — transparent HTAP.
 
-**Scope**: PolarDB-X 2.0 Enterprise Edition + AUTO mode database only.
-
-## What is CCI
-
-CCI is a **columnar clustered index** stored on object storage. It stores all columns from the primary table in columnar format by default, optimized for scan-heavy analytical workloads (aggregation, GROUP BY, wide table scans).
-
-**Key characteristics**:
-- Stores ALL columns (clustered) — no need to specify covering columns.
-- Columnar format — optimized for large range scans and aggregations.
-- Based on object storage — lower cost than row-store for large data volumes.
-- Eventually consistent — writes have some latency (not real-time).
-- Online creation — does not block DML on the primary table.
+**Scope**: Enterprise Edition + AUTO mode. Version >= 5.4.19. Snapshot features require >= 5.4.20.
 
 ## Core Workflow
 
-1. **Confirm OLAP/HTAP requirement**: User needs analytical queries (SUM/COUNT/AVG, multi-column aggregation, complex reports) on OLTP tables.
-2. **Select CCI partition key**: Choose the column most frequently used in analytical `GROUP BY` or `WHERE` filter conditions.
-3. **Create CCI** with appropriate partition count.
-4. **Verify query uses CCI**: Use `EXPLAIN` to confirm the optimizer selects the CCI path.
+1. Confirm OLAP need (aggregation, reports, HTAP)
+2. Select partition key (frequent GROUP BY / JOIN column, HASH recommended)
+3. Select sort key (range query column or ORDER BY column)
+4. Create CCI with `partition_count = nodes * cores`
+5. `SET ENABLE_COLUMNAR_OPTIMIZER = true;` for automatic routing
+6. Verify with `EXPLAIN`
 
-## When to Use CCI
+## When to Use / Not Use
 
-| Scenario | Recommended | Reason |
-|----------|-------------|--------|
-| Wide table multi-column aggregation (SUM/COUNT/AVG) | Yes | Columnar scan far faster than row scan |
-| Complex reports and dashboards | Yes | Analytical workload benefits from columnar |
-| HTAP: OLTP + OLAP on same data | Yes | CCI handles analytics without impacting OLTP |
-| Hot/cold data separation with TTL | Yes | Cold data archived to CCI (object storage) |
-| Point queries / small range scans | **No** | Use Clustered GSI instead |
-| Tables with < 100K rows | **No** | Overhead not justified for small data |
-| Extreme write-heavy with real-time read requirements | **No** | CCI has write latency (eventual consistency) |
+| Use CCI | Don't use CCI |
+|---------|---------------|
+| Wide table aggregation (SUM/COUNT/AVG) | Point queries / small range scans → use GSI |
+| Complex reports and dashboards | Tables < 100K rows |
+| HTAP: OLTP + OLAP on same data | Real-time read requirements (CCI has CDC delay) |
+| Cold data archival with TTL | Write-heavy tables requiring instant read-after-write |
+| Historical snapshot query (AS OF TSO) | No PK on table (CCI requires explicit PK) |
 
-## CCI Creation Syntax
-
-### During table creation
+## Creation Syntax
 
 ```sql
+-- Full syntax
+CREATE CLUSTERED COLUMNAR INDEX index_name
+  ON tbl_name (sort_key_col, ...)
+  [PARTITION BY HASH|KEY|RANGE|LIST(...) PARTITIONS n]
+  [COLUMNAR_OPTIONS = '{"key":"value", ...}']
+
+-- Add to existing table
+CREATE CLUSTERED COLUMNAR INDEX cci_seller
+  ON t_order(seller_id)
+  PARTITION BY HASH(order_id) PARTITIONS 16;
+
+-- With snapshot
+CREATE CLUSTERED COLUMNAR INDEX cci ON tb1(id)
+  PARTITION BY KEY(id) PARTITIONS 16
+  COLUMNAR_OPTIONS = '{"TYPE":"SNAPSHOT","SNAPSHOT_RETENTION_DAYS":"7","AUTO_GEN_COLUMNAR_SNAPSHOT_INTERVAL":"30"}';
+
+-- Inline in CREATE TABLE
 CREATE TABLE t_order (
-  order_id BIGINT PRIMARY KEY,
-  buyer_id BIGINT,
-  seller_id BIGINT,
-  amount DECIMAL(10,2),
-  create_time DATETIME,
+  id BIGINT PRIMARY KEY, seller_id BIGINT, amount DECIMAL(10,2),
   CLUSTERED COLUMNAR INDEX cci_seller(seller_id)
     PARTITION BY KEY(seller_id) PARTITIONS 16
-) PARTITION BY KEY(order_id) PARTITIONS 16;
+) PARTITION BY KEY(id) PARTITIONS 16;
 ```
 
-### Add to existing table
+**Constraints**: Table must have PK. Sort key is REQUIRED. Index name is REQUIRED. No prefix index. Partition defaults to PK + HASH if not specified. One CCI per table by default (`SET MAX_CCI_COUNT = N;` to allow more).
 
-```sql
--- Using CREATE INDEX
-CREATE CLUSTERED COLUMNAR INDEX cci_buyer
-  ON t_order(buyer_id)
-  PARTITION BY KEY(buyer_id) PARTITIONS 16;
+## Key Selection Quick Reference
 
--- Using ALTER TABLE
-ALTER TABLE t_order ADD CLUSTERED COLUMNAR INDEX cci_buyer(buyer_id)
-  PARTITION BY KEY(buyer_id) PARTITIONS 16;
-```
+| Item | Recommendation |
+|------|---------------|
+| **Partition strategy** | HASH/KEY (default). RANGE for TTL cold archive. LIST for multi-tenant. |
+| **Partition key** | Uniformly distributed, frequent GROUP BY/JOIN column. **Avoid date/time** (use as secondary partition instead). |
+| **Partition count** | `nodes * cores`. Keep consistent across JOIN-related tables. |
+| **Sort key** | Range query column, or ORDER BY column, or partition key. |
+| **Verify** | `CHECK COLUMNAR PARTITION db.tbl;` — check for data skew. |
 
-**Partition key selection for CCI**: Choose the column most frequently used in analytical `GROUP BY` clauses. This enables partition pruning for analytical queries. If unsure, use the same partition key as the primary table.
+## COLUMNAR_OPTIONS
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `TYPE` | `default` | `default` / `snapshot` / `archive` |
+| `SNAPSHOT_RETENTION_DAYS` | `7` | Snapshot retention (1-366). TYPE=snapshot only. |
+| `AUTO_GEN_COLUMNAR_SNAPSHOT_INTERVAL` | `-1` | Auto snapshot interval in minutes (>=5 or -1). TYPE=snapshot only. |
+
+TYPE transitions: default↔snapshot (OK), default↔archive (OK), archive↔snapshot (**FORBIDDEN**).
 
 ## Query with CCI
 
-The optimizer automatically selects CCI for analytical queries based on cost model:
-
 ```sql
--- Automatic (optimizer decides)
-SELECT seller_id, SUM(amount) FROM t_order
-GROUP BY seller_id ORDER BY SUM(amount) DESC LIMIT 10;
+-- Auto routing (needs ENABLE_COLUMNAR_OPTIMIZER = true on columnar read-only instance)
+SELECT seller_id, SUM(amount) FROM t_order GROUP BY seller_id;
 
--- Force CCI via HINT
-SELECT /*+TDDL:FORCE_INDEX(t_order, cci_seller)*/ seller_id, SUM(amount)
-FROM t_order GROUP BY seller_id;
+-- Force CCI
+SELECT * FROM t_order FORCE INDEX(cci_seller) WHERE seller_id = 's1';
+SELECT /*+TDDL:FORCE_INDEX(t_order, cci_seller)*/ * FROM t_order;
+SELECT * FROM t_order USE INDEX(cci_seller) WHERE seller_id = 's1';
+SELECT * FROM t_order IGNORE INDEX(cci_seller) WHERE seller_id = 's1';
 
--- Force CCI via FORCE INDEX
-SELECT seller_id, SUM(amount) FROM t_order FORCE INDEX(cci_seller)
-GROUP BY seller_id;
+-- Multi-table JOIN
+SELECT a.*, b.order_id FROM t_seller a
+  JOIN t_order b FORCE INDEX(cci_seller) ON a.seller_id = b.seller_id;
 ```
 
-## View CCI Information
+## Snapshot (AS OF TSO)
 
 ```sql
-SHOW COLUMNAR INDEX;
+-- Generate snapshot (returns TSO)
+CALL polardbx.columnar_flush('schema', 'table', 'cci_name');  -- table-level
+CALL polardbx.columnar_flush();                                 -- instance-level
+
+-- Query snapshot
+SELECT * FROM tb1 AS OF TSO <tso> FORCE INDEX(cci) ORDER BY id;
+
+-- Restore from snapshot
+INSERT INTO target SELECT * FROM source AS OF TSO <tso> FORCE INDEX(cci);
 ```
 
-## CCI vs Clustered GSI Comparison
+Snapshot uses latest table schema regardless of snapshot point. INSERT SELECT requires `autocommit=true`.
+
+## Management Commands
+
+```sql
+SHOW COLUMNAR INDEX;                         -- CCI metadata (partition, sort key, status)
+SHOW COLUMNAR STATUS;                        -- CCI data status (rows, files, size, compression)
+SHOW FULL COLUMNAR STATUS;                   -- instance-level
+SHOW DDL;                                    -- creation progress
+CHECK COLUMNAR INDEX idx ON tbl;             -- data consistency
+CHECK COLUMNAR PARTITION tbl;                -- partition distribution
+CHECK COLUMNAR SNAPSHOT tbl;                 -- snapshot status
+```
+
+## Drop / Rename / Modify
+
+```sql
+DROP INDEX cci_name ON TABLE tbl;
+ALTER TABLE tbl DROP INDEX cci_name;
+ALTER TABLE tbl RENAME INDEX old_cci TO new_cci;
+DROP COLUMNAR INDEX FOR TABLES IN db_name;
+
+-- Modify parameters at runtime
+CALL polardbx.columnar_set_config(param_key, param_val);                          -- instance-level
+CALL polardbx.columnar_set_config(cci_id, param_key, param_val);                  -- by CCI ID
+CALL polardbx.columnar_set_config(schema, table, cci_name, param_key, param_val); -- by name
+```
+
+## CCI vs Clustered GSI
 
 | Feature | Clustered GSI | CCI |
 |---------|--------------|-----|
-| Storage format | Row-store | Columnar |
-| Best for | Point queries, small range scans | Large scans, aggregations |
-| Storage backend | DN local storage | Object storage (lower cost) |
-| Data freshness | Real-time (strong consistency) | Eventually consistent (slight delay) |
-| Write impact | Distributed transaction overhead | Lower write amplification |
-| Use case | OLTP supplementary index | OLAP/HTAP analytics |
+| Storage | Row-store (DN local) | Columnar (OSS, lower cost) |
+| Best for | Point queries, small scans | Large scans, aggregations |
+| Freshness | Real-time | Eventually consistent |
+| Snapshot | No | Yes (AS OF TSO) |
 
-Both store all primary table columns by default (clustered). The key difference is storage format and applicable query types.
+## DDL Limitations
 
-## CCI + TTL Hot/Cold Separation
+Supported: DROP/TRUNCATE/RENAME TABLE, ADD/DROP/MODIFY COLUMN, ADD/DROP INDEX, RENAME CCI INDEX, ADD RANGE PARTITION.
+**Not supported**: DROP PRIMARY KEY, ALTER INDEX VISIBLE/INVISIBLE, CCI partition changes.
 
-CCI can work with TTL tables for cost-effective hot/cold architecture:
-- **Hot data**: Row-store partitioned table (fast OLTP access)
-- **Cold data**: Archived to CCI on object storage (low-cost analytical access)
+Control: `SET [GLOBAL] forbid_ddl_with_cci = true|false;`
+Modify CCI critical columns: `SET ENABLE_MODIFY_CCI_CRITICAL_COLUMN = TRUE;` (may trigger rebuild).
 
-This is configured through the `polardbx-ttl20` skill — use that skill for TTL + archive table setup.
+## Row-Column Routing
 
-## Data Freshness
+`ENABLE_COLUMNAR_OPTIMIZER = true` → OLTP queries go to row-store, OLAP queries go to CCI automatically. Auto-routing only works on **columnar read-only instances**; on primary instances use FORCE INDEX.
 
-CCI data has a **slight delay** compared to the primary table (eventual consistency). This is acceptable for:
-- Reporting and dashboards (minutes-level freshness)
-- Batch analytics (daily/hourly aggregations)
-- Historical data analysis
+## CCI + TTL
 
-NOT suitable for scenarios requiring real-time consistency (use Clustered GSI instead).
-
-## Limitations
-
-- Only supported by PolarDB-X **Enterprise Edition (Distributed Edition)**.
-- CCI data is eventually consistent (not real-time).
-- Creating CCI is an online operation (does not block DML).
-- CCI partition key must be specified with `PARTITION BY KEY(...) PARTITIONS N`.
-- One table can have multiple CCIs with different partition keys for different analytical dimensions.
+Hot data in row-store, cold data archived to CCI on OSS. Use the `polardbx-ttl20` skill for setup.
 
 ## Best Practices
 
-1. **Choose CCI partition key based on analytical patterns**: Pick the most frequent `GROUP BY` column for the CCI partition key.
-2. **Don't use CCI for point queries**: Use Clustered GSI for OLTP-style lookups.
-3. **Accept eventual consistency**: CCI is designed for analytics where slight delay is acceptable.
-4. **Combine with TTL for cost optimization**: Archive cold data to CCI on object storage.
-5. **Create multiple CCIs for different analytical dimensions** if needed (e.g., one by seller_id, one by region).
-6. **Use EXPLAIN to verify CCI usage**: Confirm the optimizer is picking the CCI path for your queries.
+1. Partition key = most frequent GROUP BY/JOIN column, HASH strategy.
+2. Sort key = range query column or ORDER BY column.
+3. Partition count = nodes * cores; keep consistent across JOIN tables.
+4. Use EXPLAIN to verify CCI path.
+5. ENABLE_COLUMNAR_OPTIMIZER for transparent routing.
+6. Combine with TTL for cold data cost optimization.
+7. Verify partition quality: `CHECK COLUMNAR PARTITION`.
+8. Create multiple CCIs for different analytical dimensions (e.g., by seller, by region).
 
 ## Reference
 
 | Reference | Description |
 |-----------|-------------|
-| [references/cci.md](references/cci.md) | CCI creation syntax, query usage, relationship with GSI, TTL combination, limitations |
+| [references/cci.md](references/cci.md) | Deep dive: full partition syntax, secondary partitions, detailed DDL limitations, data type restrictions, column change constraints, parameter config, FAQ |
