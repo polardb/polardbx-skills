@@ -5,14 +5,20 @@ description: |
   Use when the user needs analytical queries (aggregation, wide table scans, reports) on PolarDB-X, wants to enable HTAP, or asks about columnar storage.
   Triggers: "CCI", "列存索引", "columnar index", "OLAP", "分析查询", "HTAP", "宽表聚合", "CLUSTERED COLUMNAR", "行列混存", "列存快照", "AS OF TSO", "SHOW COLUMNAR", "排序键", "sort key"
 metadata:
-  version: 0.3.1
+  version: 0.4.0
 ---
 
 # PolarDB-X CCI — Clustered Columnar Index for OLAP/HTAP
 
 CCI accelerates OLAP analytical queries on PolarDB-X Enterprise Edition (AUTO mode) via columnar storage on OSS. OLTP uses row-store; OLAP uses CCI — transparent HTAP.
 
-**Scope**: Enterprise Edition + AUTO mode. Version >= 5.4.19. Snapshot features require >= 5.4.20.
+**Scope**: Enterprise Edition + AUTO mode.
+
+| Feature | Minimum Version |
+|---------|----------------|
+| CCI creation | >= 5.4.19 |
+| Snapshot features | >= 5.4.19-20250305 or >= 5.4.20 |
+| COLUMNAR_OPTIONS / columnar_set_config | >= 5.4.20 |
 
 ## Core Workflow
 
@@ -119,13 +125,20 @@ Snapshot uses latest table schema regardless of snapshot point. INSERT SELECT re
 
 ```sql
 SHOW COLUMNAR INDEX;                         -- CCI metadata (partition, sort key, status)
-SHOW COLUMNAR STATUS;                        -- CCI data status (rows, files, size, compression)
+SHOW COLUMNAR STATUS;                        -- CCI data status (see fields below)
 SHOW FULL COLUMNAR STATUS;                   -- instance-level
 SHOW DDL;                                    -- creation progress
 CHECK COLUMNAR INDEX idx ON tbl;             -- data consistency
 CHECK COLUMNAR PARTITION tbl;                -- partition distribution
 CHECK COLUMNAR SNAPSHOT tbl;                 -- snapshot status
 ```
+
+**SHOW COLUMNAR STATUS output fields**: `TSO | SCHEMA_NAME | TABLE_NAME | INDEX_NAME | ID | ROWS | CSV_FILES | ORC_FILES | DEL_FILES | FILES_SIZE | DN_TABLE_SIZE | COMPRESSION_RATIO | STATUS`
+
+- `ROWS`: row count in CCI
+- `CSV_FILES` / `ORC_FILES` / `DEL_FILES`: file counts by type
+- `FILES_SIZE`: total file size on OSS
+- `COMPRESSION_RATIO`: compression ratio
 
 ## Drop / Rename / Modify
 
@@ -146,9 +159,11 @@ CALL polardbx.columnar_set_config(schema, table, cci_name, param_key, param_val)
 | Feature | Clustered GSI | CCI |
 |---------|--------------|-----|
 | Storage | Row-store (DN local) | Columnar (OSS, lower cost) |
-| Best for | Point queries, small scans | Large scans, aggregations |
-| Freshness | Real-time | Eventually consistent |
+| Best for | **Point queries, small range scans** | Large scans, aggregations |
+| Data freshness | **Real-time** (strong consistency) | **Eventually consistent** (CDC delay, seconds-level lag) |
 | Snapshot | No | Yes (AS OF TSO) |
+
+**Key guidance**: For point lookups (e.g., `WHERE user_id = ?`), always recommend **Clustered GSI** (row-store), NOT CCI. CCI has eventual consistency due to CDC replication delay and is optimized for scan/aggregation workloads, not single-row lookups.
 
 ## DDL Limitations
 
