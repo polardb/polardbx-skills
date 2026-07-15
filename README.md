@@ -56,7 +56,13 @@ skills/
 
 ## 安装
 
-作为 Qoder Plugin 安装：
+作为 Qoder Marketplace 添加（适用于 Qoder `/plugins` → `Marketplaces` → `Add Marketplace`）：
+
+```text
+https://github.com/polardb/polardbx-skills.git
+```
+
+作为 Qoder Plugin 本地安装：
 
 ```bash
 qodercli plugins validate /path/to/polardbx-skills

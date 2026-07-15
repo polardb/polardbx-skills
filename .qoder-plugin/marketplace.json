@@ -1,0 +1,29 @@
+{
+  "name": "polardbx-skills",
+  "owner": {
+    "name": "PolarDB-X Team"
+  },
+  "metadata": {
+    "description": "PolarDB-X skills suite for SQL design, CCI, TTL, online DDL, pagination, plan analysis, standard edition, and zero provisioning.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "polardbx-skills",
+      "description": "PolarDB-X skills suite for SQL design, CCI, TTL, online DDL, pagination, plan analysis, standard edition, and zero provisioning.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/polardbx-cci",
+        "./skills/polardbx-online-ddl",
+        "./skills/polardbx-pagination",
+        "./skills/polardbx-plan-analysis",
+        "./skills/polardbx-sql",
+        "./skills/polardbx-standard",
+        "./skills/polardbx-ttl20",
+        "./skills/polardbx-zero",
+        "./skills/sql-review"
+      ]
+    }
+  ]
+}
