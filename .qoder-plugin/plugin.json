@@ -23,5 +23,15 @@
     "database",
     "polardbx"
   ],
-  "skills": "./skills/"
+  "skills": [
+    "./skills/polardbx-cci",
+    "./skills/polardbx-online-ddl",
+    "./skills/polardbx-pagination",
+    "./skills/polardbx-plan-analysis",
+    "./skills/polardbx-sql",
+    "./skills/polardbx-standard",
+    "./skills/polardbx-ttl20",
+    "./skills/polardbx-zero",
+    "./skills/sql-review"
+  ]
 }
