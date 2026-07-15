@@ -56,6 +56,19 @@ skills/
 
 ## 安装
 
+作为 Qoder Plugin 安装：
+
+```bash
+qodercli plugins validate /path/to/polardbx-skills
+qodercli plugins install /path/to/polardbx-skills
+```
+
+团队共享时可安装到项目作用域：
+
+```bash
+qodercli plugins install /path/to/polardbx-skills --scope project
+```
+
 通过 [skills.sh](https://skills.sh) 安装：
 
 ```bash

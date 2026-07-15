@@ -1,0 +1,27 @@
+{
+  "name": "polardbx-skills",
+  "displayName": "PolarDB-X Skills",
+  "version": "0.1.0",
+  "description": "PolarDB-X skills suite for SQL design, CCI, TTL, online DDL, pagination, plan analysis, standard edition, and zero provisioning.",
+  "descriptionZh": "PolarDB-X 技能合集，覆盖 SQL 设计、CCI、TTL、Online DDL、分页、执行计划分析、标准版和零配置实例。",
+  "author": {
+    "name": "PolarDB-X Team"
+  },
+  "homepage": "https://github.com/polardb/polardbx-skills",
+  "repository": "https://github.com/polardb/polardbx-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "qoder-plugin",
+    "skill",
+    "polardbx",
+    "database",
+    "sql"
+  ],
+  "category": "developer-tools",
+  "tags": [
+    "skill",
+    "database",
+    "polardbx"
+  ],
+  "skills": "./skills/"
+}
