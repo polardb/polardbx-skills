@@ -79,15 +79,6 @@
       "skills": [
         "./skills/polardbx-zero"
       ]
-    },
-    {
-      "name": "sql-review",
-      "description": "Scan codebases for SQL, analyze index usage with PolarDB-X EXPLAIN, and provide optimization recommendations.",
-      "source": "./",
-      "strict": false,
-      "skills": [
-        "./skills/sql-review"
-      ]
     }
   ]
 }

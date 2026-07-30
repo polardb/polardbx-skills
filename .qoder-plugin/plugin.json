@@ -25,7 +25,6 @@
     "./skills/polardbx-sql",
     "./skills/polardbx-standard",
     "./skills/polardbx-ttl20",
-    "./skills/polardbx-zero",
-    "./skills/sql-review"
+    "./skills/polardbx-zero"
   ]
 }
