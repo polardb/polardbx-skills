@@ -48,16 +48,18 @@ skills/
 
 ## 当前 Skills
 
-- **polardbx-sql** - PolarDB-X 企业版 SQL 编写与 MySQL 兼容性处理（分区设计、GSI、Sequence、分布式事务、EXPLAIN 诊断等）。
-- **polardbx-online-ddl** - PolarDB-X 企业版 Online DDL 安全变更。通过 EXPLAIN ONLINE_DDL 评估锁表风险，支持 OMC 无锁列类型变更、长事务检查、DDL 进度监控。
-- **polardbx-pagination** - PolarDB-X 企业版高效分页与大表遍历。推荐 Keyset 分页替代 LIMIT M,N 深翻页，覆盖按分片遍历、索引要求、Java 代码示例。
-- **polardbx-cci** - PolarDB-X 企业版 CCI 列存索引（OLAP/HTAP）。创建和使用 Clustered Columnar Index 加速分析查询，涵盖完整创建语法（排序键、分区键、COLUMNAR_OPTIONS）、分区/排序键选择指南、SHOW/CHECK 管理命令、列存快照（AS OF TSO 查询与恢复）、参数调优、行列路由、DDL 限制、CCI vs GSI 对比、CCI + TTL 冷热分离。
-- **polardbx-ttl20** - PolarDB-X 企业版 TTL 2.0 冷数据归档与自动加 Range 分区。分析表结构推荐归档策略（行级或分区级），生成生产可用的 TTL SQL；也支持仅自动预建分区（无清理）的场景。
-- **polardbx-plan-analysis** - PolarDB-X 执行计划分析与 SQL 等价性验证。解读 EXPLAIN / EXPLAIN COST / EXPLAIN ANALYZE 输出，涵盖 17 类算子解读、代价分析、运行时瓶颈定位、SQL 与计划等价性 14 维度检查、可选 Graphviz 计划可视化。
-- **polardbx-standard** - PolarDB-X 标准版独有特性、高可用架构、运维操作和性能最佳实践，涵盖 X-Paxos HA、Lizard 事务、Panda Index、向量索引（VECTOR + HNSW 语义搜索）。
-- **polardbx-zero** - 通过 API 一键创建免认证的 PolarDB-X 临时实例（支持标准版和企业版，最长 30 天自动过期），适用于 AI agent 存储、MCP server 后端、临时测试等场景。
-- **polardbx-ops** - 通过 Aliyun CLI 管理阿里云 PolarDB-X 实例的生命周期与日常运维，涵盖实例创建/删除/重启、弹性扩缩容、参数管理、备份恢复、监控日志、账号与安全访问等。
-- **sql-review** - 扫描代码库中的 SQL 语句，在 PolarDB-X 测试实例上通过 mock 数据 + EXPLAIN 分析索引使用情况，给出索引优化建议。支持全仓库扫描、指定模块、Git 增量扫描三种模式。
+| Skill | 定位 | 适用场景 | 核心能力 |
+|---|---|---|---|
+| `polardbx-sql` | 企业版 SQL 编写与兼容性 | 分区设计、GSI、Sequence、MySQL 迁移、分布式事务 | 生成和改写 PolarDB-X 企业版 SQL，处理 MySQL 兼容性差异 |
+| `polardbx-online-ddl` | Online DDL 安全变更 | DDL 锁表评估、OMC 无锁变更、长事务检查 | 使用 `EXPLAIN ONLINE_DDL` 评估风险，指导安全执行 DDL |
+| `polardbx-pagination` | 高效分页与大表遍历 | 深分页、批量导出、大表游标遍历 | 推荐 Keyset 分页，覆盖索引要求和批处理代码示例 |
+| `polardbx-cci` | CCI 列存索引（OLAP/HTAP） | 分析查询、宽表聚合、行列混存、列存快照 | 创建和使用 Clustered Columnar Index，处理分区键、排序键和管理命令 |
+| `polardbx-ttl20` | TTL 2.0 冷数据归档 | 数据过期、冷热分离、自动加 Range 分区 | 分析表结构并生成 TTL 归档或自动预建分区 SQL |
+| `polardbx-plan-analysis` | 执行计划分析与等价性验证 | EXPLAIN 解读、代价分析、运行时瓶颈定位、SQL/计划一致性检查 | 覆盖 17 类算子、14 维等价性检查和可选 Graphviz 可视化 |
+| `polardbx-standard` | 标准版特性与运维 | X-Cluster、X-Paxos HA、Lizard、Panda Index、向量检索 | 说明标准版架构、MySQL 兼容行为和独有功能最佳实践 |
+| `polardbx-zero` | 免认证临时实例创建 | AI agent 存储、MCP 后端、临时测试、教程演示 | 通过 API 创建支持标准版/企业版的短期 PolarDB-X 实例 |
+| `polardbx-ops` | 阿里云实例生命周期与日常运维 | 创建/删除/重启实例、扩缩容、参数、备份、监控日志、账号安全 | 通过 Aliyun CLI 管理云上 PolarDB-X 实例和运维任务 |
+| `sql-review` | 代码库 SQL Review | 全仓库扫描、指定模块扫描、Git 增量扫描 | 提取 SQL 并在测试实例上用 mock 数据与 EXPLAIN 分析索引使用情况 |
 
 ## 安装
 
