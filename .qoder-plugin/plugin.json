@@ -19,6 +19,7 @@
   "skills": [
     "./skills/polardbx-cci",
     "./skills/polardbx-online-ddl",
+    "./skills/polardbx-ops",
     "./skills/polardbx-pagination",
     "./skills/polardbx-plan-analysis",
     "./skills/polardbx-sql",

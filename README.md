@@ -35,6 +35,10 @@ skills/
 │   └── references/
 ├── polardbx-zero/         # PolarDB-X Zero 一键创建临时实例
 │   └── SKILL.md
+├── polardbx-ops/          # PolarDB-X 实例生命周期与日常运维（Aliyun CLI）
+│   ├── SKILL.md
+│   ├── references/
+│   └── scripts/
 └── sql-review/            # SQL Review 索引分析与推荐
     ├── SKILL.md
     └── references/
@@ -52,6 +56,7 @@ skills/
 - **polardbx-plan-analysis** - PolarDB-X 执行计划分析与 SQL 等价性验证。解读 EXPLAIN / EXPLAIN COST / EXPLAIN ANALYZE 输出，涵盖 17 类算子解读、代价分析、运行时瓶颈定位、SQL 与计划等价性 14 维度检查、可选 Graphviz 计划可视化。
 - **polardbx-standard** - PolarDB-X 标准版独有特性、高可用架构、运维操作和性能最佳实践，涵盖 X-Paxos HA、Lizard 事务、Panda Index、向量索引（VECTOR + HNSW 语义搜索）。
 - **polardbx-zero** - 通过 API 一键创建免认证的 PolarDB-X 临时实例（支持标准版和企业版，最长 30 天自动过期），适用于 AI agent 存储、MCP server 后端、临时测试等场景。
+- **polardbx-ops** - 通过 Aliyun CLI 管理阿里云 PolarDB-X 实例的生命周期与日常运维，涵盖实例创建/删除/重启、弹性扩缩容、参数管理、备份恢复、监控日志、账号与安全访问等。
 - **sql-review** - 扫描代码库中的 SQL 语句，在 PolarDB-X 测试实例上通过 mock 数据 + EXPLAIN 分析索引使用情况，给出索引优化建议。支持全仓库扫描、指定模块、Git 增量扫描三种模式。
 
 ## 安装
