@@ -1,7 +1,7 @@
 {
   "name": "polardbx-skills",
   "displayName": "PolarDB-X Skills",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PolarDB-X skills suite for SQL design, CCI, TTL, online DDL, pagination, plan analysis, standard edition, and zero provisioning.",
   "author": {
     "name": "PolarDB-X Team"
